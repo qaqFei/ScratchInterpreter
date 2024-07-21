@@ -161,3 +161,18 @@ def MessageBoxTimeout(title: str, msg: str, flag: int, timeout: int = 0):
     if needwait > 0.0:
         sleep(needwait)
     return r
+
+def Key2Scratch(key: str) -> str|None:
+    return "space" if key == " " else (
+        key if len(key) == 1 and ord("a") <= ord(key) <= ord("z") else (
+            "down arrow" if key == "arrowdown" else (
+                "up arrow" if key == "arrowup" else (
+                    "left arrow" if key == "arrowleft" else (
+                        "right arrow" if key == "arrowright" else (
+                            key if len(key) == 1 and ord("0") <= ord(key) <= ord("9") else None
+                        )
+                    )
+                )
+            )
+        )
+    )

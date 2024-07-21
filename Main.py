@@ -65,6 +65,8 @@ soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
 Loudness = -1.0
 rtssManager = ScratchObjects.ScratchRuntimeStackManager([])
+KeyStates = {}
+MouseStates = {}
 Number = int|float
 
 def KeyPress(
@@ -75,24 +77,19 @@ def KeyPress(
     repeat: bool,
     scratch_keypress_only: bool = False
 ):
-    ScratchKeyPressEventKey = "space" if key == " " else (
-        key if len(key) == 1 and ord("a") <= ord(key) <= ord("z") else (
-            "down arrow" if key == "arrowdown" else (
-                "up arrow" if key == "arrowup" else (
-                    "left arrow" if key == "arrowleft" else (
-                        "right arrow" if key == "arrowright" else (
-                            key if len(key) == 1 and ord("0") <= ord(key) <= ord("9") else None
-                        )
-                    )
-                )
-            )
-        )
-    )
+    ScratchKeyPressEventKey = ToolFuncs.Key2Scratch(key)
+    KeyStates[ScratchKeyPressEventKey] = True
     if ScratchKeyPressEventKey is not None:
         for target, codeblock, presskey in WhenKeyPressKeyNodes:
             if presskey == ScratchKeyPressEventKey or presskey == "any":
                 RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
     if scratch_keypress_only: return None
+
+def KeyUp(
+    key: str
+):
+    ScratchKeyPressEventKey = ToolFuncs.Key2Scratch(key)
+    KeyStates[ScratchKeyPressEventKey] = False
 
 def MouseWheel(
     x: int,
@@ -121,9 +118,18 @@ def MouseDown(
     button: int
 ):
     "0: left, 1: middle, 2: right"
+    MouseStates[button] = True
     for target, codeblock in WhenTargetClickedNodes:
         if PosInTarget(x, y, target):
             RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
+
+def MouseUp(
+    x: int,
+    y: int,
+    button: int
+):
+    "0: left, 1: middle, 2: right"
+    MouseStates[button] = False
 
 def PosInTarget(x: Number, y: Number, target: ScratchObjects.ScratchTarget) -> bool:
     x, y = int(x), int(y)
@@ -223,6 +229,58 @@ def ScratchEvalHelper(target: ScratchObjects.ScratchTarget, code:ScratchObjects.
                     ptarget = [i for i in project_object.targets if i.name == menuv][0]
                     p = ptarget.x, ptarget.y
             return math.sqrt((target.x - p[0]) ** 2 + (target.y - p[1]) ** 2)
+        case "sensing_keypressed":
+            key = kwargs["key"]
+            if key == "any":
+                return any(KeyStates.values())
+            return KeyStates.get(key, False)
+        case "sensing_mousedown":
+            return any(MouseStates.values())
+        case "sensing_mousex":
+            return fixPosOutStage(*getMousePosOfScratch())[0]
+        case "sensing_mousey":
+            return fixPosOutStage(*getMousePosOfScratch())[1]
+        case "sensing_of":
+            datatarget_name = kwargs["datatarget_name"]
+            targetproperty_name = kwargs["targetproperty_name"]
+            
+            match datatarget_name:
+                case "_stage_":
+                    datatarget = ScratchObjects.Stage
+                    match targetproperty_name:
+                        case "backdrop #":
+                            return datatarget.currentCostume + 1
+                        case "backdrop name":
+                            return datatarget.costumes[datatarget.currentCostume].name
+                        case "volume":
+                            return datatarget.volume
+                        case _: # target local variable
+                            value = [i for i in datatarget.variables.values() if i.name == targetproperty_name][0].value
+                            if isinstance(value, list):
+                                return " ".join(map(str, value))
+                            return value
+                case _: # Sprite
+                    datatarget = [i for i in project_object.targets if i.name == datatarget_name][0]
+                    match targetproperty_name:
+                        case "x position":
+                            return datatarget.x
+                        case "y position":
+                            return datatarget.y
+                        case "direction":
+                            return datatarget.direction
+                        case "costume #":
+                            return datatarget.currentCostume + 1
+                        case "costume name":
+                            return datatarget.costumes[datatarget.currentCostume].name
+                        case "size":
+                            return datatarget.size
+                        case "volume":
+                            return datatarget.volume
+                        case _: # target local variable
+                            value = [i for i in datatarget.variables.values() if i.name == targetproperty_name][0].value
+                            if isinstance(value, list):
+                                return " ".join(map(str, value))
+                            return value
         case _:
             assert False
 
@@ -247,14 +305,20 @@ def MainInterpreter():
     WhenStartAsCloneNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "control_start_as_clone"]
     
     window.jsapi.set_attr("KeyPress", KeyPress)
+    window.jsapi.set_attr("KeyUp", KeyUp)
     window.jsapi.set_attr("MouseWheel", MouseWheel)
     window.jsapi.set_attr("MouseDown", MouseDown)
+    window.jsapi.set_attr("MouseUp", MouseUp)
     window.run_js_code("_KeyPress = (e) => {pywebview.api.call_attr('KeyPress', e.key.toLowerCase(), e.shiftKey, e.ctrlKey, e.altKey, e.repeat);};")
+    window.run_js_code("_KeyUp = (e) => {pywebview.api.call_attr('KeyUp', e.key.toLowerCase());};")
     window.run_js_code("_MouseWheel = (e) => {pywebview.api.call_attr('MouseWheel', e.clientX, e.clientY, e.delta, e.wheelDelta);};")
     window.run_js_code("_MouseDown = (e) => {pywebview.api.call_attr('MouseDown', e.clientX, e.clientY, e.button);};")
+    window.run_js_code("_MouseUp = (e) => {pywebview.api.call_attr('MouseUp', e.clientX, e.clientY, e.button);};")
     window.run_js_code("window.addEventListener('keydown', _KeyPress);")
+    window.run_js_code("window.addEventListener('keyup', _KeyUp);")
     window.run_js_code("window.addEventListener('wheel', _MouseWheel);")
     window.run_js_code("window.addEventListener('mousedown', _MouseDown);")
+    window.run_js_code("window.addEventListener('mouseup', _MouseUp);")
     
     for target in project_object.targets:
         target.timerst = time()
@@ -680,6 +744,9 @@ def RunCodeBlock(
                     answer = window.run_js_code(f"prompt('{window.process_code_string_syntax_tostring(f"{target.name} is asking:\n    {question}")}');")
                     if answer is not None: break
                 target.askans = answer
+            
+            case "sensing_setdragmode":
+                target.draggable = target.ScratchEval(codeblock) == "draggable"
             
             case "sensing_resettimer":
                 target.timerst = time()

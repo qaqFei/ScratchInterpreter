@@ -184,15 +184,23 @@ class ScratchTarget:
                 return ScratchEvalHelper(self, code, menuv=menuv)
             case "sensing_answer": 
                 return self.askans
-            case "sensing_keypressed": ...
-            case "sensing_mousedown": ...
-            case "sensing_mousex": ...
-            case "sensing_mousey": ...
+            case "sensing_keypressed":
+                key = self.getInputValue(*code.inputs["KEY_OPTION"])
+                return ScratchEvalHelper(self, code, key=key)
+            case "sensing_mousedown":
+                return ScratchEvalHelper(self, code)
+            case "sensing_mousex":
+                return ScratchEvalHelper(self, code)
+            case "sensing_mousey":
+                return ScratchEvalHelper(self, code)
             case "sensing_loudness":
                 return -1
             case "sensing_timer": 
                 return time() - self.timerst
-            case "sensing_of": ...
+            case "sensing_of":
+                datatarget_name = self.getInputValue(*code.inputs["OBJECT"])
+                targetproperty_name = code.fields["PROPERTY"][0] # why call ScratchEval to get this value? because this codeblock property value (data in fields) and execblock is the same codeblock.
+                return ScratchEvalHelper(self, code, datatarget_name=datatarget_name, targetproperty_name=targetproperty_name)
             case "sensing_current": ...
             case "sensing_dayssince2000":
                 now = time() / 86400
@@ -379,7 +387,7 @@ class ScratchTarget:
                 return code.fields["BACKDROP"][0]
             case "sound_sounds_menu":
                 return code.fields["SOUND_MENU"][0]
-            case "event_whenkeypressed":
+            case "event_whenkeypressed" | "sensing_keyoptions":
                 return code.fields["KEY_OPTION"][0]
             case "event_whenbackdropswitchesto":
                 return code.fields["BACKDROP"][0]
@@ -395,6 +403,10 @@ class ScratchTarget:
                 return code.fields["TOUCHINGOBJECTMENU"][0]
             case "sensing_distancetomenu":
                 return code.fields["DISTANCETOMENU"][0]
+            case "sensing_setdragmode":
+                return code.fields["DRAG_MODE"][0]
+            case "sensing_of_object_menu":
+                return code.fields["OBJECT"][0]
             case _:
                 return "0.0"
     
