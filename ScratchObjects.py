@@ -140,6 +140,8 @@ class ScratchTarget:
         self.timerst = time()
         self.timertime = 0.0
         self.timercallback: typing.Callable[[ScratchTarget], None] = lambda target: None
+        self.isClone = False
+        self.clones:list[ScratchTarget] = []
         
         Thread(target=self._timer, daemon=True).start()
     
@@ -372,6 +374,10 @@ class ScratchTarget:
                 return code.fields["WHENGREATERTHANMENU"][0]
             case "event_whenbroadcastreceived":
                 return code.fields["BROADCAST_OPTION"][1]
+            case "control_stop":
+                return code.fields["STOP_OPTION"][0]
+            case "control_create_clone_of_menu":
+                return code.fields["CLONE_OPTION"][0]
             case _:
                 return "0.0"
     
@@ -401,7 +407,9 @@ class ScratchTarget:
         match itype:
             case 1:
                 if isinstance(value, str):
-                    return self.ScratchEval(self.blocks[value])
+                    if r2c:
+                        return self.ScratchEval(self.blocks[value])
+                    return self.blocks[value]
                 return self.getInputValue(*value)
             case 2:
                 if r2c:
@@ -409,7 +417,10 @@ class ScratchTarget:
                 else:
                     return self.blocks[value]
             case 3:
-                return self._giv_run(value)
+                if r2c:
+                    return self._giv_run(value)
+                else:
+                    return self.blocks[value]
             case 4|5|6|7|8:
                 return float(value) if value else 0.0
             case 9|10:
@@ -439,7 +450,7 @@ class ScratchContext:
         self.master = master
         self.running = master
         self.substack = substack
-    
+        
     def __iter__(self):
         return self
     
@@ -456,3 +467,28 @@ class ScratchContext:
                 raise StopIteration
         
         return self.running
+
+@dataclass
+class ScratchRuntimeStack:
+    target: ScratchTarget
+    stack_first: ScratchCodeBlock
+    stack_id: str = ""
+    stopped: bool = False
+    
+    def __post_init__(self):
+        self.stack_id = f"RuntimeStack_{time() * randint(0, 2 << 31)}"
+
+@dataclass
+class ScratchRuntimeStackManager:
+    stacks: list[ScratchRuntimeStack]
+
+    def get_new(self, target: ScratchTarget, codeblock: ScratchCodeBlock) -> ScratchRuntimeStack:
+        stack = ScratchRuntimeStack(target, codeblock)
+        self.stacks.append(stack)
+        return stack
+
+    def destory_stack(self, stack: ScratchRuntimeStack):
+        self.stacks.remove(stack)
+    
+    def get_stacks(self, target: ScratchTarget) -> list[ScratchRuntimeStack]:
+        return [i for i in self.stacks if i.target is target]

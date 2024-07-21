@@ -5,6 +5,7 @@ from time import time, sleep
 from random import randint
 from shutil import rmtree
 from threading import Thread
+import copy
 import math
 import typing
 
@@ -63,6 +64,7 @@ AFps = 120
 soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
 Loudness = -1.0
+rtssManager = ScratchObjects.ScratchRuntimeStackManager([])
 
 def KeyPress(
     key: str,
@@ -88,7 +90,7 @@ def KeyPress(
     if ScratchKeyPressEventKey is not None:
         for target, codeblock, presskey in WhenKeyPressKeyNodes:
             if presskey == ScratchKeyPressEventKey or presskey == "any":
-                RunCodeBlock(target, codeblock)
+                RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
     if scratch_keypress_only: return None
 
 def MouseWheel(
@@ -131,13 +133,13 @@ def MouseDown(
         intarget = window.run_js_code(f"ctx.getImageData({x}, {y}, 1, 1).data[3] != 0.0;")
         window.run_js_code("ctx = ctx_backup; delete ctx_backup;")
         if intarget:
-            RunCodeBlock(target, codeblock)
+            RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
 
 def ChangeBgCallback(target: ScratchObjects.ScratchTarget):
     currentName = ScratchObjects.Stage.costumes[ScratchObjects.Stage.currentCostume].name
     for target, codeblock, bgname in WhenChangeBgToNodes:
         if bgname == currentName:
-            RunCodeBlock(target, codeblock)
+            RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
 
 def TimerCallback(target: ScratchObjects.ScratchTarget):
     for i in WhenGtNodes:
@@ -157,7 +159,7 @@ def TimerCallback(target: ScratchObjects.ScratchTarget):
             if i[-1] <= value and judge:
                 i[-2] = True
         if judge and i[-2]:
-            RunCodeBlock(target, codeblock)
+            RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
             i[-2] = False
         i[-1] = jvar
 
@@ -168,6 +170,7 @@ def MainInterpreter():
     global WhenChangeBgToNodes
     global WhenGtNodes
     global WhenReceiveNodes
+    global WhenStartAsCloneNodes
     
     Thread(target=Render, daemon=True).start()
     MasterCodeNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenflagclicked"]
@@ -176,6 +179,7 @@ def MainInterpreter():
     WhenChangeBgToNodes = [(t, v, t.ScratchEval(v)) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenbackdropswitchesto"]
     WhenGtNodes = [[(t, v, float(t.getInputValue(*v.inputs["VALUE"])), t.ScratchEval(v)), True, None] for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whengreaterthan"]
     WhenReceiveNodes = [(v, t.ScratchEval(v)) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenbroadcastreceived"]
+    WhenStartAsCloneNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "control_start_as_clone"]
     
     window.jsapi.set_attr("KeyPress", KeyPress)
     window.jsapi.set_attr("MouseWheel", MouseWheel)
@@ -196,7 +200,7 @@ def MainInterpreter():
 
 def FlagClicked_ThreadInterator(target: ScratchObjects.ScratchTarget, node: ScratchObjects.ScratchCodeBlock):
     if node.next:
-        RunCodeBlock(target, target.blocks[node.next])
+        RunCodeBlock(target, target.blocks[node.next], rtssManager.get_new(target, node))
 
 def getMousePosOfScratch() -> tuple[float, float]:
     try:
@@ -225,8 +229,21 @@ def FixTooBigTarget(target: ScratchObjects.ScratchTarget):
     if target.size > mins:
         target.size = mins
 
+def DestoryStack(stack: ScratchObjects.ScratchRuntimeStack):
+    try: rtssManager.destory_stack(stack)
+    except ValueError: pass
+
 @ToolFuncs.ThreadFunc
-def RunCodeBlock(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, runtext:bool=True):
+def RunCodeBlock(
+    target: ScratchObjects.ScratchTarget,
+    codeblock: ScratchObjects.ScratchCodeBlock,
+    stack: ScratchObjects.ScratchRuntimeStack,
+    runtext:bool=True
+):
+    if stack.stopped:
+        DestoryStack(stack)
+        return None
+    
     try:
         match codeblock.opcode:
             case "motion_movesteps":
@@ -437,37 +454,73 @@ def RunCodeBlock(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects
                 for broadcast_codeblock, n in WhenReceiveNodes:
                     if bcname == n:
                         if codeblock.opcode == "event_broadcast":
-                            Thread(target=RunCodeBlock, args=(target, broadcast_codeblock), daemon=True).start()
+                            Thread(target=RunCodeBlock, args=(target, broadcast_codeblock, rtssManager.get_new(target, codeblock)), daemon=True).start()
                         else:
-                            RunCodeBlock(target, broadcast_codeblock)
+                            RunCodeBlock(target, broadcast_codeblock, rtssManager.get_new(target, codeblock))
             
             case "control_wait":
                 sleep(float(target.getInputValue(*codeblock.inputs["DURATION"])))
             
             case "control_repeat":
-                Run_Repeat(target, codeblock)
+                Run_Repeat(target, codeblock, stack)
                 
             case "control_forever":
-                Run_Forever(target, codeblock)
+                Run_Forever(target, codeblock, stack)
             
             case "control_if":
                 ifvar = target.getInputValue(*codeblock.inputs["CONDITION"])
                 if ifvar:
-                    Run_If(target, codeblock)
+                    Run_If(target, codeblock, stack)
             
             case "control_if_else":
                 ifvar = target.getInputValue(*codeblock.inputs["CONDITION"])
-                Run_IfElse(target, codeblock, ifvar)
+                Run_IfElse(target, codeblock, ifvar, stack)
             
             case "control_wait_until":
                 while not target.getInputValue(*codeblock.inputs["CONDITION"]): sleep(RunWait)
             
             case "control_repeat_until":
                 get_ifvar = lambda: target.getInputValue(*codeblock.inputs["CONDITION"])
-                Run_RepeatUntil(target, codeblock, get_ifvar)
+                Run_RepeatUntil(target, codeblock, get_ifvar, stack)
             
             case "control_stop":
-                print(codeblock)
+                stopv = target.ScratchEval(codeblock).split(" ")[0]
+                match stopv:
+                    case "all":
+                        for i in rtssManager.stacks:
+                            i.stopped = True
+                            DestoryStack(i)
+                    case "this":
+                        stack.stopped = True
+                        DestoryStack(stack)
+                    case "other":
+                        for i in rtssManager.get_stacks(target):
+                            if i is stack: continue
+                            i.stopped = True
+                            DestoryStack(i)
+            
+            case "control_create_clone_of":
+                menuv = target.getInputValue(*codeblock.inputs["CLONE_OPTION"])
+                match menuv:
+                    case "_myself_":
+                        clone_master = target
+                    case _:
+                        clone_master = [i for i in project_object.targets if i.name == menuv][0]
+                
+                clone_target = copy.copy(clone_master)
+                clone_target.clones = []
+                clone_target.isClone = True
+                for ttarget, tcodeblock in WhenStartAsCloneNodes:
+                    if ttarget is clone_master:
+                        Thread(target=RunCodeBlock, args=(clone_target, tcodeblock, rtssManager.get_new(clone_target, tcodeblock)), daemon=True).start()
+                project_object.targets.append(clone_target)
+            
+            case "control_delete_this_clone":
+                if target.isClone:
+                    project_object.targets.remove(target)
+                    for i in rtssManager.get_stacks(target):
+                        i.stopped = True
+                        DestoryStack(i)
 
             case "sensing_resettimer":
                 target.timerst = time()
@@ -476,51 +529,57 @@ def RunCodeBlock(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects
     
     sleep(RunWait)
     if codeblock.next and runtext:
-        RunCodeBlock(target, target.blocks[codeblock.next])
+        RunCodeBlock(target, target.blocks[codeblock.next], stack)
 
 @ToolFuncs.ThreadFunc
-def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock):
+def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
     if codeblock.inputs["SUBSTACK"][1] is None:
-        while True: sleep(RunWait)
+        while True:
+            if stack.stopped:
+                return None
+            sleep(RunWait)
         
     context = ScratchObjects.ScratchContext(target, codeblock)
     while True:
         for running in context:
-            RunCodeBlock(target, running, False)
+            RunCodeBlock(target, running, stack, False)
 
 @ToolFuncs.ThreadFunc
-def Run_Repeat(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock):
+def Run_Repeat(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
     looptimes = int(target.getInputValue(*codeblock.inputs["TIMES"]))
     if looptimes <= 0: return None
     if codeblock.inputs["SUBSTACK"][1] is None:
-        sleep(RunWait * looptimes)
+        for _ in [None] * looptimes:
+            if stack.stopped:
+                return None
+            sleep(RunWait)
     
     context = ScratchObjects.ScratchContext(target, codeblock)
     for _ in [None] * looptimes:
         for running in context:
-            RunCodeBlock(target, running, False)
+            RunCodeBlock(target, running, stack, False)
 
 @ToolFuncs.ThreadFunc
-def Run_If(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock):
+def Run_If(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
     context = ScratchObjects.ScratchContext(target, codeblock)
     for running in context:
-        RunCodeBlock(target, running, False)
+        RunCodeBlock(target, running, stack, False)
 
 @ToolFuncs.ThreadFunc
-def Run_IfElse(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, ifvar: bool):
+def Run_IfElse(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, ifvar: bool, stack: ScratchObjects.ScratchRuntimeStack):
     substack = "SUBSTACK" if ifvar else "SUBSTACK2"
     context = ScratchObjects.ScratchContext(target, codeblock, substack)
     for running in context:
-        RunCodeBlock(target, running, False)
+        RunCodeBlock(target, running, stack, False)
 
 @ToolFuncs.ThreadFunc
-def Run_RepeatUntil(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, get_ifvar: typing.Callable[[], bool]):
+def Run_RepeatUntil(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, get_ifvar: typing.Callable[[], bool], stack: ScratchObjects.ScratchRuntimeStack):
     if codeblock.inputs["SUBSTACK"][1] is None: return None
         
     context = ScratchObjects.ScratchContext(target, codeblock)
     while not get_ifvar():
         for running in context:
-            RunCodeBlock(target, running, False)
+            RunCodeBlock(target, running, stack, False)
 
 def Render():
     while True:
