@@ -35,6 +35,39 @@
         ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     }
 
+    function createTempCanvas() {
+        let ele = document.createElement("canvas");
+        ele.width = window.innerWidth;
+        ele.height = window.innerHeight;
+        let ctx = ele.getContext("2d");
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        return [ele, ctx];
+    }
+
+    function touchColorAtMainCv(r, g, b, tempctx) {
+        let w = tempctx.canvas.width;
+        let h = tempctx.canvas.height;
+        let imdata = tempctx.getImageData(0, 0, w, h).data;
+        let maincvimdata = ctx.getImageData(0, 0, w, h).data;
+        for (let i = 0; i < h; i++) {
+            for (let j = 0; j < w; j++) {
+                let index = (i * w + j) * 4;
+
+                let ta = imdata[index + 3];
+
+                let mr = maincvimdata[index + 0];
+                let mg = maincvimdata[index + 1];
+                let mb = maincvimdata[index + 2];
+                let ma = maincvimdata[index + 3];
+
+                if (!ta||!ma) continue;
+                let v = Math.abs((r - mr) + (g - mg) + (b - mb));
+                if (v <= 10) return true;
+            }
+        }
+        return false;
+    }
+
     CanvasRenderingContext2D.prototype.drawRotateImage = function(im, x, y, width, height, deg, alpha, usd) {
         this.save();
         this.globalAlpha = alpha;

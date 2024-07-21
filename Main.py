@@ -189,7 +189,16 @@ def ScratchEvalHelper(target: ScratchObjects.ScratchTarget, code:ScratchObjects.
                             (othbox[3], othbox[0])
                         ],
                     ))
-        case "sensing_touchingcolor": ...
+        case "sensing_touchingcolor":
+            r, g, b = kwargs["color"]
+            cvname = f"ofcr_cv{int(time() * randint(0, 2 << 31))}"
+            ctxname = f"ofcr_ctx{int(time() * randint(0, 2 << 31))}"
+            window.run_js_code(f'''var [{cvname}, {ctxname}] = createTempCanvas();''')
+            RenderTarget(target, ctxname)
+            window.run_js_wait_code()
+            ans = window.run_js_code(f"touchColorAtMainCv({r}, {g}, {b}, {ctxname});")
+            window.run_js_code(f"delete {cvname}; delete {ctxname};")
+            return ans
         case _:
             assert False
 
@@ -701,7 +710,7 @@ def Render():
         window.run_js_wait_code()
         sleep(1 / 120)
 
-def RenderTarget(target: ScratchObjects.ScratchTarget):
+def RenderTarget(target: ScratchObjects.ScratchTarget, ctxname: str = "ctx"):
     if target.tempo is not None:
         # stage
         costume = target.costumes[target.currentCostume]
@@ -750,7 +759,7 @@ def RenderTarget(target: ScratchObjects.ScratchTarget):
         x, y = ((target.x / 480) + 0.5) * w, ((-target.y / 360) + 0.5) * h
         window.run_js_code(
             f"\
-            ctx.drawRotateImage(\
+            {ctxname}.drawRotateImage(\
                 {window.get_img_jsvarname(costume.pyresid)},\
                 {x}, {y}, {tw}, {th}, {deg - 90}, 1.0, {"true" if usd else "false"}\
             );\
