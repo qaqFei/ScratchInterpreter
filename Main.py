@@ -170,6 +170,26 @@ def ScratchEvalHelper(target: ScratchObjects.ScratchTarget, code:ScratchObjects.
             match kwargs["menuv"]:
                 case "_mouse_":
                     return PosInTarget(*map(int, getMousePosOfWindow()), target)
+                case "_edge_":
+                    return not TargetInStage(target)
+                case _:
+                    targetbox = getTargetBox(target)
+                    othbox = getTargetBox([i for i in project_object.targets if i.name == kwargs["menuv"]][0])
+                    return any(batch_is_intersect(
+                        [
+                            (targetbox[0], targetbox[1]),
+                            (targetbox[1], targetbox[2]),
+                            (targetbox[2], targetbox[3]),
+                            (targetbox[3], targetbox[0])
+                        ],
+                        [
+                            (othbox[0], othbox[1]),
+                            (othbox[1], othbox[2]),
+                            (othbox[2], othbox[3]),
+                            (othbox[3], othbox[0])
+                        ],
+                    ))
+        case "sensing_touchingcolor": ...
         case _:
             assert False
 
@@ -248,6 +268,77 @@ def FixTooBigTarget(target: ScratchObjects.ScratchTarget):
 def DestoryStack(stack: ScratchObjects.ScratchRuntimeStack):
     try: rtssManager.destory_stack(stack)
     except ValueError: pass
+
+def TargetInStage(target: ScratchObjects.ScratchTarget) -> bool:
+    lt, rt, rb, lb  = getTargetBox(target)
+    return pointInScreen(lt) and pointInScreen(rt) and pointInScreen(rb) and pointInScreen(lb)
+
+def pointInScreen(x: float, y: float) -> bool:
+    return 0 <= x <= w and 0 <= y <= h
+
+def getTargetBox(target: ScratchObjects.ScratchTarget) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]:
+    costume = target.costumes[target.currentCostume]
+    x, y = (target.x + stage_w / 2) / stage_w * w, (- target.y + stage_h / 2) / stage_h * h
+    tw, th = costume.w * target.size / 100, costume.h * target.size / 100
+    tw /= 480; th /= 360
+    tw *= w; th *= h
+    if target.rotationStyle == "don't rotate":
+        lt = x - tw / 2, y - th / 2
+        rt = x + tw / 2, y - th / 2
+        rb = x + tw / 2, y + th / 2
+        lb = x - tw / 2, y + th / 2
+        return lt, rt, rb, lb
+    elif target.rotationStyle == "left-right":
+        deg = 90 if target.direction >= 0 else -90
+    else:
+        deg = target.direction
+    lt = - tw / 2, - th / 2
+    rt = + tw / 2, - th / 2
+    rb = + tw / 2, + th / 2
+    lb = - tw / 2, + th / 2
+    lt = ToolFuncs.rotate_point2(*lt, deg + 90)
+    rt = ToolFuncs.rotate_point2(*rt, deg + 90)
+    rb = ToolFuncs.rotate_point2(*rb, deg + 90)
+    lb = ToolFuncs.rotate_point2(*lb, deg + 90)
+    lt = lt[0] + x, lt[1] + y
+    rt = rt[0] + x, rt[1] + y
+    rb = rb[0] + x, rb[1] + y
+    lb = lb[0] + x, lb[1] + y
+    return lt, rt, rb, lb
+
+def batch_is_intersect(
+    lines_group_1:typing.List[typing.Tuple[
+        typing.Tuple[float, float],
+        typing.Tuple[float, float]
+    ]],
+    lines_group_2:typing.List[typing.Tuple[
+        typing.Tuple[float, float],
+        typing.Tuple[float, float]
+    ]]
+) -> typing.Generator[bool, None, None]:
+    for i in lines_group_1:
+        for j in lines_group_2:
+            yield is_intersect(i,j)
+
+def is_intersect(
+    line_1:typing.Tuple[
+        typing.Tuple[float, float],
+        typing.Tuple[float, float]
+    ],
+    line_2:typing.Tuple[
+        typing.Tuple[float, float],
+        typing.Tuple[float, float]
+    ]
+) -> bool:
+    if (
+        max(line_1[0][0], line_1[1][0]) < min(line_2[0][0], line_2[1][0]) or
+        max(line_2[0][0], line_2[1][0]) < min(line_1[0][0], line_1[1][0]) or
+        max(line_1[0][1], line_1[1][1]) < min(line_2[0][1], line_2[1][1]) or
+        max(line_2[0][1], line_2[1][1]) < min(line_1[0][1], line_1[1][1])
+    ):
+        return False
+    else:
+        return True
 
 @ToolFuncs.ThreadFunc
 def RunCodeBlock(
@@ -613,11 +704,11 @@ def Render():
 def RenderTarget(target: ScratchObjects.ScratchTarget):
     if target.tempo is not None:
         # stage
-        costome = target.costumes[target.currentCostume]
-        imp = costome.w / costome.h
+        costume = target.costumes[target.currentCostume]
+        imp = costume.w / costume.h
         if imp == w / h:
             window.create_image(
-                costome.pyresid,
+                costume.pyresid,
                 0, 0,
                 w, h,
                 wait_execute = True
@@ -625,7 +716,7 @@ def RenderTarget(target: ScratchObjects.ScratchTarget):
         elif imp > w / h:
             imh = w / imp
             window.create_image(
-                costome.pyresid,
+                costume.pyresid,
                 0, h / 2 - imh / 2,
                 w, imh,
                 wait_execute = True
@@ -633,7 +724,7 @@ def RenderTarget(target: ScratchObjects.ScratchTarget):
         else:
             imw = h * imp
             window.create_image(
-                costome.pyresid,
+                costume.pyresid,
                 w / 2 - imw / 2, 0,
                 imw, h,
                 wait_execute = True
@@ -642,7 +733,7 @@ def RenderTarget(target: ScratchObjects.ScratchTarget):
         # sprite
         if not target.visible:
             return None
-        costome = target.costumes[target.currentCostume]
+        costume = target.costumes[target.currentCostume]
         tempdeg = target.direction % (360 if target.direction >= 0 else -360)
         usd = False # Upsidedown
         if target.rotationStyle == "all around":
@@ -652,15 +743,15 @@ def RenderTarget(target: ScratchObjects.ScratchTarget):
             if deg == -90: usd = True
         else:
             deg = 90
-        tw, th = costome.w * target.size / 100, costome.h * target.size / 100
+        tw, th = costume.w * target.size / 100, costume.h * target.size / 100
         tw /= 480; th /= 360
         tw *= w; th *= h
-        if costome.bitmapResolution is not None: tw /= costome.bitmapResolution; th /= costome.bitmapResolution
+        if costume.bitmapResolution is not None: tw /= costume.bitmapResolution; th /= costume.bitmapResolution
         x, y = ((target.x / 480) + 0.5) * w, ((-target.y / 360) + 0.5) * h
         window.run_js_code(
             f"\
             ctx.drawRotateImage(\
-                {window.get_img_jsvarname(costome.pyresid)},\
+                {window.get_img_jsvarname(costume.pyresid)},\
                 {x}, {y}, {tw}, {th}, {deg - 90}, 1.0, {"true" if usd else "false"}\
             );\
             ",

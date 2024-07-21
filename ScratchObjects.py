@@ -171,11 +171,10 @@ class ScratchTarget:
                 return self.volume
             case "sensing_touchingobject":
                 menuv = self.getInputValue(*code.inputs["TOUCHINGOBJECTMENU"])
-                value = ScratchEvalHelper(self, code, menuv=menuv)
-                return value
+                return ScratchEvalHelper(self, code, menuv=menuv)
             case "sensing_touchingcolor":
-                color = self.getInputValue(*code.inputs["COLOR"])
-                print(code, color)
+                color = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"]))
+                return ScratchEvalHelper(self, code, color=color)
             case "sensing_coloristouchingcolor": ...
             case "sensing_distanceto": ...
             case "sensing_answer": 

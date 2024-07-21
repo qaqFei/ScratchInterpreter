@@ -141,3 +141,11 @@ def unpack_color(color: str):
     g = int(color[3:5], 16)
     b = int(color[5:7], 16)
     return r, g, b
+
+def rotate_point2(x, y, deg):
+    c = cos(radians(deg))
+    s = sin(radians(deg))
+    matrix = [[c, -s], [s, c]]
+    new_x = matrix[0][0] * x + matrix[0][1] * y
+    new_y = matrix[1][0] * x + matrix[1][1] * y
+    return new_x, new_y
