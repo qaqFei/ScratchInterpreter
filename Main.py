@@ -5,6 +5,7 @@ from time import time, sleep
 from random import randint
 from shutil import rmtree
 from threading import Thread
+from ctypes import windll
 import copy
 import math
 import typing
@@ -37,7 +38,7 @@ for dn in [i for i in listdir(systempdir) if ToolFuncs.isQfsiTempdir(systempdir,
     try:
         rmtree(dp)
     except Exception as e:
-        print(f"Warning: {e}")
+        print(f"Warning: {e.__class__}, {e}")
 tempdir_dp = f"{systempdir}\\qfsi_tempdir_{time() + randint(0, 2 << 31)}"
 tempunpack_dp = tempdir_dp + "\\unpack"
 
@@ -50,7 +51,7 @@ if not ToolFuncs.isInvalidFile(f"{tempunpack_dp}\\project.json"):
 try:
     project_object = ToolFuncs.loadSb3(f"{tempunpack_dp}\\project.json", tempunpack_dp)
 except Exception as e:
-    print(f"Load project.json failed. err: {e}")
+    print(f"Load project.json failed. err: {e.__class__}, {e}")
     ToolFuncs.exitProcess(1)
 
 stage_w, stage_h = 480, 360
@@ -136,6 +137,11 @@ def PosInTarget(x: Number, y: Number, target: ScratchObjects.ScratchTarget) -> b
     try: return costume.data.getpixel((x, y))[-1] > 0
     except IndexError: return False
 
+def fixPosOutStage(x: Number, y: Number) -> tuple[Number, Number]:
+    x = x if stage_mleft <= x <= stage_mright else (stage_mleft if x < stage_mleft else stage_mright)
+    y = y if stage_mbottom <= y <= stage_mtop else (stage_mbottom if y < stage_mbottom else stage_mtop)
+    return x, y
+
 def ChangeBgCallback(target: ScratchObjects.ScratchTarget):
     currentName = ScratchObjects.Stage.costumes[ScratchObjects.Stage.currentCostume].name
     for target, codeblock, bgname in WhenChangeBgToNodes:
@@ -189,16 +195,34 @@ def ScratchEvalHelper(target: ScratchObjects.ScratchTarget, code:ScratchObjects.
                             (othbox[3], othbox[0])
                         ],
                     ))
-        case "sensing_touchingcolor":
+        case "sensing_touchingcolor": # FIXME, if color is below the target, it will return false. and i think it has more err.
             r, g, b = kwargs["color"]
             cvname = f"ofcr_cv{int(time() * randint(0, 2 << 31))}"
             ctxname = f"ofcr_ctx{int(time() * randint(0, 2 << 31))}"
             window.run_js_code(f'''var [{cvname}, {ctxname}] = createTempCanvas();''')
-            RenderTarget(target, ctxname)
-            window.run_js_wait_code()
+            RenderTarget(target, ctxname, False)
             ans = window.run_js_code(f"touchColorAtMainCv({r}, {g}, {b}, {ctxname});")
             window.run_js_code(f"delete {cvname}; delete {ctxname};")
             return ans
+        case "sensing_coloristouchingcolor": # FIXME, if color is below the target, it will return false. and i think it has more err.
+            r1, g1, b1 = kwargs["c1"]
+            r2, g2, b2 = kwargs["c2"]
+            cvname = f"ofcr_cv{int(time() * randint(0, 2 << 31))}"
+            ctxname = f"ofcr_ctx{int(time() * randint(0, 2 << 31))}"
+            window.run_js_code(f'''var [{cvname}, {ctxname}] = createTempCanvas();''')
+            RenderTarget(target, ctxname, False)
+            ans = window.run_js_code(f"colorTouchColor({r1}, {g1}, {b1}, {r2}, {g2}, {b2}, {ctxname});")
+            window.run_js_code(f"delete {cvname}; delete {ctxname};")
+            return ans
+        case "sensing_distanceto":
+            menuv = kwargs["menuv"]
+            match menuv:
+                case "_mouse_":
+                    p = fixPosOutStage(*getMousePosOfScratch())
+                case _:
+                    ptarget = [i for i in project_object.targets if i.name == menuv][0]
+                    p = ptarget.x, ptarget.y
+            return math.sqrt((target.x - p[0]) ** 2 + (target.y - p[1]) ** 2)
         case _:
             assert False
 
@@ -476,13 +500,23 @@ def RunCodeBlock(
             case "motion_setrotationstyle":
                 target.rotationStyle = codeblock.fields["STYLE"][0]
             
-            case "looks_sayforsecs": pass
+            case "looks_sayforsecs":
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
+                waitms = int(float(target.getInputValue(*codeblock.inputs["SECS"])) * 1000)
+                ToolFuncs.MessageBoxTimeout(f"{target.name} is saying", msg, 0x40, waitms)
             
-            case "looks_say": pass
+            case "looks_say":
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
+                Thread(target=ToolFuncs.MessageBox, args=(f"{target.name} is saying", msg, 0x40), daemon=True).start()
             
-            case "looks_thinkforsecs": pass
+            case "looks_thinkforsecs":
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
+                waitms = int(float(target.getInputValue(*codeblock.inputs["SECS"])) * 1000)
+                ToolFuncs.MessageBoxTimeout(f"{target.name} is thinking", msg, 0x40, waitms)
             
-            case "looks_think": pass
+            case "looks_think":
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
+                Thread(target=ToolFuncs.MessageBox, args=(f"{target.name} is thinking", msg, 0x40), daemon=True).start()
             
             case "looks_switchcostumeto":
                 costume_name = target.getInputValue(*codeblock.inputs["COSTUME"])
@@ -504,7 +538,9 @@ def RunCodeBlock(
                         ScratchObjects.Stage.currentCostume = [i.name for i in ScratchObjects.Stage.costumes].index(backdrop_name)
                 ChangeBgCallback(target)
             
-            case "looks_switchbackdroptoandwait": ...
+            case "looks_switchbackdroptoandwait": # XXX, in scratch i cannot find this block, but it is exists in wiki...
+                codeblock.opcode = "looks_switchbackdropto"
+                RunCodeBlock(target, codeblock, stack, False)
             
             case "looks_nextbackdrop":
                 ScratchObjects.Stage.currentCostume = (ScratchObjects.Stage.currentCostume + 1) % len(ScratchObjects.Stage.costumes)
@@ -545,11 +581,11 @@ def RunCodeBlock(
             case "sound_stopallsounds":
                 soundbuffers.clear()
             
-            case "sound_changeeffectby": pass
+            case "sound_changeeffectby": ...
             
-            case "sound_seteffectto": pass
+            case "sound_seteffectto": ...
             
-            case "sound_cleareffects": pass
+            case "sound_cleareffects": ...
             
             case "sound_changevolumeby":
                 target.volume += float(target.getInputValue(*codeblock.inputs["VOLUME"]))
@@ -638,17 +674,24 @@ def RunCodeBlock(
                         i.stopped = True
                         DestoryStack(i)
 
+            case "sensing_askandwait":
+                question = str(target.getInputValue(*codeblock.inputs["QUESTION"]))
+                while True:
+                    answer = window.run_js_code(f"prompt('{window.process_code_string_syntax_tostring(f"{target.name} is asking:\n    {question}")}');")
+                    if answer is not None: break
+                target.askans = answer
+            
             case "sensing_resettimer":
                 target.timerst = time()
-    except StopAsyncIteration as e:
-        print(f"Error in RunCodeBlock: {e}")
+    except Exception as e:
+        print(f"Error in RunCodeBlock: {e.__class__}, {e}")
     
     sleep(RunWait)
     if codeblock.next and runtext:
         try:
             RunCodeBlock(target, target.blocks[codeblock.next], stack)
         except KeyError as e:
-            print(f"Error in RunCodeBlock: Unknow Codeblock {e}")
+            print(f"Error in RunCodeBlock: Unknow Codeblock {e.__class__}, {e}")
 
 @ToolFuncs.ThreadFunc
 def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
@@ -703,41 +746,40 @@ def Run_RepeatUntil(target: ScratchObjects.ScratchTarget, codeblock: ScratchObje
 def Render():
     while True:
         window.clear_canvas(wait_execute=True)
+        window.run_js_code(f"stage_ctx.clearRect(0, 0, {w}, {h});", add_code_array=True)
+        soeredtarget = sorted(project_object.targets, key = lambda x: x.layerOrder)
+        stagetargets = filter(lambda x: x.isStage, soeredtarget)
+        spritetargets = filter(lambda x: not x.isStage, soeredtarget)
         
-        for target in sorted(project_object.targets, key = lambda x: x.layerOrder):
+        for target in stagetargets:
+            RenderTarget(target)
+        window.run_js_code(f"ctx.drawImage(stage_cvele, 0, 0);", add_code_array=True)
+        
+        for target in spritetargets:
             RenderTarget(target)
             
         window.run_js_wait_code()
         sleep(1 / 120)
 
-def RenderTarget(target: ScratchObjects.ScratchTarget, ctxname: str = "ctx"):
+def RenderTarget(target: ScratchObjects.ScratchTarget, ctxname: str = "ctx", wait: bool = True):
     if target.tempo is not None:
         # stage
         costume = target.costumes[target.currentCostume]
         imp = costume.w / costume.h
         if imp == w / h:
-            window.create_image(
-                costume.pyresid,
-                0, 0,
-                w, h,
-                wait_execute = True
-            )
+            render_x, render_y = 0, 0
+            render_w, render_h = w, h
         elif imp > w / h:
             imh = w / imp
-            window.create_image(
-                costume.pyresid,
-                0, h / 2 - imh / 2,
-                w, imh,
-                wait_execute = True
-            )
+            render_x, render_y = 0, h / 2 - imh / 2
+            render_w, render_h = w, imh
         else:
             imw = h * imp
-            window.create_image(
-                costume.pyresid,
-                w / 2 - imw / 2, 0,
-                imw, h,
-                wait_execute = True
-            )
+            render_x, render_y = w / 2 - imw / 2, 0
+            render_w, render_h = imw, h
+        window.run_js_code(f"\
+            stage_ctx.drawImage({window.get_img_jsvarname(costume.pyresid)}, {render_x}, {render_y}, {render_w}, {render_h});\
+        ", add_code_array=wait)
     else:
         # sprite
         if not target.visible:
@@ -764,7 +806,7 @@ def RenderTarget(target: ScratchObjects.ScratchTarget, ctxname: str = "ctx"):
                 {x}, {y}, {tw}, {th}, {deg - 90}, 1.0, {"true" if usd else "false"}\
             );\
             ",
-            add_code_array=True
+            add_code_array=wait
         )
 
 def Boot():

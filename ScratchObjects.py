@@ -15,7 +15,7 @@ import ToolFuncs
 AssetPath:str|None = None # Set this value before new any ScratchAsset object.
 Assets:list[ScratchAsset] = []
 Stage:ScratchTarget|None = None
-ScratchEvalHelper = lambda *args, **kwargs: None
+ScratchEvalHelper = lambda *args, **kwargs: None # Set this value before call ScratchTarget.ScratchEval.
 
 @dataclass
 class ScratchVariable:
@@ -83,7 +83,7 @@ class ScratchAsset:
                     with open(tempfp, "rb") as f:
                         self.data = f.read()
                 except Exception as e:
-                    print(f"Warning: Asset cannot load as image or sound, {self.md5ext}")
+                    print(f"Warning: Asset cannot load as image or sound, {e.__class__}, {self.md5ext}")
                     if isinstance(self, ScratchSound):
                         with open(self._fp, "rb") as f:
                             self.data = f.read()
@@ -91,7 +91,7 @@ class ScratchAsset:
                         self.data = Image.new("RGBA", (4, 4), (0, 0, 0, 0))
                         self.w, self.h = self.data.size
         except Exception as e:
-            print(f"Load asset error: {e}")
+            print(f"Load asset error: {e.__class__}, {e}")
         
         Assets.append(self)
 
@@ -175,8 +175,13 @@ class ScratchTarget:
             case "sensing_touchingcolor":
                 color = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"]))
                 return ScratchEvalHelper(self, code, color=color)
-            case "sensing_coloristouchingcolor": ...
-            case "sensing_distanceto": ...
+            case "sensing_coloristouchingcolor":
+                c1 = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"]))
+                c2 = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR2"]))
+                return ScratchEvalHelper(self, code, c1=c1, c2=c2)
+            case "sensing_distanceto":
+                menuv = self.getInputValue(*code.inputs["DISTANCETOMENU"])
+                return ScratchEvalHelper(self, code, menuv=menuv)
             case "sensing_answer": 
                 return self.askans
             case "sensing_keypressed": ...
@@ -388,6 +393,8 @@ class ScratchTarget:
                 return code.fields["CLONE_OPTION"][0]
             case "sensing_touchingobjectmenu":
                 return code.fields["TOUCHINGOBJECTMENU"][0]
+            case "sensing_distancetomenu":
+                return code.fields["DISTANCETOMENU"][0]
             case _:
                 return "0.0"
     

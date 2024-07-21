@@ -3,6 +3,7 @@ from ctypes import windll
 from json import load
 from threading import Thread
 from math import radians, sin, cos
+from time import time, sleep
 
 import ScratchObjects
 
@@ -149,3 +150,14 @@ def rotate_point2(x, y, deg):
     new_x = matrix[0][0] * x + matrix[0][1] * y
     new_y = matrix[1][0] * x + matrix[1][1] * y
     return new_x, new_y
+
+def MessageBox(title: str, msg: str, flag: int):
+    return windll.user32.MessageBoxW(None, msg, title, flag)
+
+def MessageBoxTimeout(title: str, msg: str, flag: int, timeout: int = 0):
+    dialogst = time()
+    r = windll.user32.MessageBoxTimeoutW(None, msg, title, flag, 0, timeout)
+    needwait = timeout / 1000 - (time() - dialogst)
+    if needwait > 0.0:
+        sleep(needwait)
+    return r
