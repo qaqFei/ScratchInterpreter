@@ -58,13 +58,13 @@ stage_mleft = -240
 stage_mtop = 180
 stage_mright = 240
 stage_mbottom = -180
-
 RunWait = 1 / 120
 AFps = 120
 soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
 Loudness = -1.0
 rtssManager = ScratchObjects.ScratchRuntimeStackManager([])
+Number = int|float
 
 def KeyPress(
     key: str,
@@ -121,19 +121,20 @@ def MouseDown(
 ):
     "0: left, 1: middle, 2: right"
     for target, codeblock in WhenTargetClickedNodes:
-        window.run_js_code(
-            f"\
-            ctx_backup = ctx;\
-            ctx = offscreen_ctx;\
-            ctx.clearRect(0, 0, offscreen_canvas_ele.width, offscreen_canvas_ele.height);\
-            "
-        )
-        RenderTarget(target)
-        window.run_js_wait_code()
-        intarget = window.run_js_code(f"ctx.getImageData({x}, {y}, 1, 1).data[3] != 0.0;")
-        window.run_js_code("ctx = ctx_backup; delete ctx_backup;")
-        if intarget:
+        if PosInTarget(x, y, target):
             RunCodeBlock(target, codeblock, rtssManager.get_new(target, codeblock))
+
+def PosInTarget(x: Number, y: Number, target: ScratchObjects.ScratchTarget) -> bool:
+    x, y = int(x), int(y)
+    x, y = x - (target.x + stage_w / 2) / stage_w * w, y - (- target.y + stage_h / 2) / stage_h * h
+    costume = target.costumes[target.currentCostume]
+    deg = math.degrees(math.atan2(y, x))
+    x, y = ToolFuncs.rotate_point(
+        0, 0, deg - target.direction, math.sqrt(x ** 2 + y ** 2)
+    )
+    x, y = int(x * costume.scale), int(y * costume.scale)
+    try: return costume.data.getpixel((x, y))[-1] > 0
+    except IndexError: return False
 
 def ChangeBgCallback(target: ScratchObjects.ScratchTarget):
     currentName = ScratchObjects.Stage.costumes[ScratchObjects.Stage.currentCostume].name
@@ -163,6 +164,15 @@ def TimerCallback(target: ScratchObjects.ScratchTarget):
             i[-2] = False
         i[-1] = jvar
 
+def ScratchEvalHelper(target: ScratchObjects.ScratchTarget, code:ScratchObjects.ScratchCodeBlock, **kwargs):
+    match code.opcode:
+        case "sensing_touchingobject":
+            match kwargs["menuv"]:
+                case "_mouse_":
+                    return PosInTarget(*map(int, getMousePosOfWindow()), target)
+        case _:
+            assert False
+
 def MainInterpreter():
     global MasterCodeNodes
     global WhenKeyPressKeyNodes
@@ -171,6 +181,8 @@ def MainInterpreter():
     global WhenGtNodes
     global WhenReceiveNodes
     global WhenStartAsCloneNodes
+    
+    ScratchObjects.ScratchEvalHelper = ScratchEvalHelper
     
     Thread(target=Render, daemon=True).start()
     MasterCodeNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenflagclicked"]
@@ -203,13 +215,17 @@ def FlagClicked_ThreadInterator(target: ScratchObjects.ScratchTarget, node: Scra
         RunCodeBlock(target, target.blocks[node.next], rtssManager.get_new(target, node))
 
 def getMousePosOfScratch() -> tuple[float, float]:
+    cpos_x, cpos_y = getMousePosOfWindow()
+    cpos_x, cpos_y = cpos_x / w, cpos_y / h
+    cpos_x, cpos_y = cpos_x * stage_w - stage_w / 2, cpos_y * stage_h - stage_h / 2
+    return cpos_x, -cpos_y
+
+def getMousePosOfWindow() -> tuple[float, float]:
     try:
         cpos_x, cpos_y = GetCursorPos()
         cpos_x, cpos_y = cpos_x - window.winfo_x(), cpos_y - window.winfo_y()
         cpos_x, cpos_y = cpos_x - dw_legacy, cpos_y - dh_legacy
-        cpos_x, cpos_y = cpos_x / w, cpos_y / h
-        cpos_x, cpos_y = cpos_x * stage_w - stage_w / 2, cpos_y * stage_h - stage_h / 2
-        return cpos_x, -cpos_y
+        return cpos_x, cpos_y
     except Exception: # window closed
         return 0.0, 0.0
 
@@ -529,7 +545,10 @@ def RunCodeBlock(
     
     sleep(RunWait)
     if codeblock.next and runtext:
-        RunCodeBlock(target, target.blocks[codeblock.next], stack)
+        try:
+            RunCodeBlock(target, target.blocks[codeblock.next], stack)
+        except KeyError as e:
+            print(f"Error in RunCodeBlock: Unknow Codeblock {e}")
 
 @ToolFuncs.ThreadFunc
 def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
@@ -640,10 +659,10 @@ def RenderTarget(target: ScratchObjects.ScratchTarget):
         x, y = ((target.x / 480) + 0.5) * w, ((-target.y / 360) + 0.5) * h
         window.run_js_code(
             f"\
-            {"usd = true; " if usd else ""}ctx.drawRotateImage(\
+            ctx.drawRotateImage(\
                 {window.get_img_jsvarname(costome.pyresid)},\
-                {x}, {y}, {tw}, {th}, {deg - 90}, 1.0\
-            ); {"usd = false;" if usd else ""}\
+                {x}, {y}, {tw}, {th}, {deg - 90}, 1.0, {"true" if usd else "false"}\
+            );\
             ",
             add_code_array=True
         )

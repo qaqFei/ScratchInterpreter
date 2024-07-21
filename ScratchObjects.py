@@ -14,6 +14,7 @@ import cairosvg
 AssetPath:str|None = None # Set this value before new any ScratchAsset object.
 Assets:list[ScratchAsset] = []
 Stage:ScratchTarget|None = None
+ScratchEvalHelper = lambda *args, **kwargs: None
 
 @dataclass
 class ScratchVariable:
@@ -63,6 +64,7 @@ class ScratchAsset:
         self.pyresid = f"Asset_{randint(0, 2 << 31)}"
         self._fp = f"{AssetPath}\\{self.md5ext}"
         self.w, self.h = None, None
+        self.scale = 1.0
         try:
             try:
                 try:
@@ -72,6 +74,7 @@ class ScratchAsset:
                     cairosvg.svg2png(url=self._fp, write_to=self._fp, scale=4)
                     self.data = Image.open(self._fp)
                     self.w, self.h = self.data.width / 4, self.data.height / 4
+                    self.scale = 4.0
             except Exception:
                 try:
                     tempfp = f"{AssetPath}\\pydub_{self.md5ext}.wav"
@@ -165,9 +168,12 @@ class ScratchTarget:
                 return self.size
             case "sound_volume":
                 return self.volume
-            case "sensing_touchingobject": pass
-            case "sensing_touchingcolor": pass
-            case "sensing_coloristouchingcolor": pass
+            case "sensing_touchingobject":
+                menuv = self.getInputValue(*code.inputs["TOUCHINGOBJECTMENU"])
+                value = ScratchEvalHelper(self, code, menuv=menuv)
+                return value
+            case "sensing_touchingcolor": ...
+            case "sensing_coloristouchingcolor": ...
             case "sensing_distanceto": ...
             case "sensing_answer": 
                 return self.askans
@@ -378,6 +384,8 @@ class ScratchTarget:
                 return code.fields["STOP_OPTION"][0]
             case "control_create_clone_of_menu":
                 return code.fields["CLONE_OPTION"][0]
+            case "sensing_touchingobjectmenu":
+                return code.fields["TOUCHINGOBJECTMENU"][0]
             case _:
                 return "0.0"
     

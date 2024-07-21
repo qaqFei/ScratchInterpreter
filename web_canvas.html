@@ -18,12 +18,9 @@
     html_ele = root_ele.children[0];
     body_ele = html_ele.children[1];
     canvas_ele = document.createElement("canvas");
-    offscreen_canvas_ele = document.createElement("canvas");
     body_ele.appendChild(canvas_ele);
     ctx = canvas_ele.getContext("2d");
-    offscreen_ctx = offscreen_canvas_ele.getContext("2d");
     JavaScript_WaitToExecute_CodeArray = new Array();
-    usd = false; // Upsidedown
     
     function process_jswteca() {
         for(var i=0;i<JavaScript_WaitToExecute_CodeArray.length;i++){
@@ -35,13 +32,10 @@
     function resizeCanvas() {
         canvas_ele.width = window.innerWidth;
         canvas_ele.height = window.innerHeight;
-        offscreen_canvas_ele.width = canvas_ele.width;
-        offscreen_canvas_ele.height = canvas_ele.height;
         ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-        offscreen_ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     }
 
-    CanvasRenderingContext2D.prototype.drawRotateImage = function(im, x, y, width, height, deg, alpha) {
+    CanvasRenderingContext2D.prototype.drawRotateImage = function(im, x, y, width, height, deg, alpha, usd) {
         this.save();
         this.globalAlpha = alpha;
         this.translate(x,y);
