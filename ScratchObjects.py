@@ -7,9 +7,10 @@ import typing
 import math
 
 from pydub import AudioSegment
-
 from PIL import UnidentifiedImageError, Image
 import cairosvg
+
+import ToolFuncs
 
 AssetPath:str|None = None # Set this value before new any ScratchAsset object.
 Assets:list[ScratchAsset] = []
@@ -172,7 +173,9 @@ class ScratchTarget:
                 menuv = self.getInputValue(*code.inputs["TOUCHINGOBJECTMENU"])
                 value = ScratchEvalHelper(self, code, menuv=menuv)
                 return value
-            case "sensing_touchingcolor": ...
+            case "sensing_touchingcolor":
+                color = self.getInputValue(*code.inputs["COLOR"])
+                print(code, color)
             case "sensing_coloristouchingcolor": ...
             case "sensing_distanceto": ...
             case "sensing_answer": 
