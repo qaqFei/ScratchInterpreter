@@ -452,7 +452,7 @@ def RunCodeBlock(
     target: ScratchObjects.ScratchTarget,
     codeblock: ScratchObjects.ScratchCodeBlock,
     stack: ScratchObjects.ScratchRuntimeStack,
-    runtext:bool=True
+    runnext:bool=True
 ):
     if stack.stopped:
         DestoryStack(stack)
@@ -878,7 +878,7 @@ def RunCodeBlock(
         print(f"Error in RunCodeBlock: {e.__class__}, {e}")
     
     sleep(RunWait)
-    if codeblock.next and runtext:
+    if codeblock.next and runnext:
         try:
             RunCodeBlock(target, target.blocks[codeblock.next], stack)
         except KeyError as e:
