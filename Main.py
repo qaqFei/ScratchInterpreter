@@ -5,7 +5,6 @@ from time import time, sleep
 from random import randint
 from shutil import rmtree
 from threading import Thread
-from ctypes import windll
 import copy
 import math
 import typing
@@ -59,7 +58,7 @@ stage_mleft = -240
 stage_mtop = 180
 stage_mright = 240
 stage_mbottom = -180
-RunWait = 1 / 120
+RunWait = 0.0 # 1 / 120
 AFps = 120
 soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
@@ -302,7 +301,7 @@ def MainInterpreter():
     WhenTargetClickedNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenthisspriteclicked"]
     WhenChangeBgToNodes = [(t, v, t.ScratchEval(v)) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenbackdropswitchesto"]
     WhenGtNodes = [[(t, v, float(t.getInputValue(*v.inputs["VALUE"])), t.ScratchEval(v)), True, None] for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whengreaterthan"]
-    WhenReceiveNodes = [(v, t.ScratchEval(v)) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenbroadcastreceived"]
+    WhenReceiveNodes = [(t, v, t.ScratchEval(v)) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenbroadcastreceived"]
     WhenStartAsCloneNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "control_start_as_clone"]
     ScratchFunctions = [(t, v, t.getInputValue(*v.inputs["custom_block"], r2c=False).proccode) for t in project_object.targets for v in t.blocks.values() if v.opcode == "procedures_definition"]
     
@@ -594,13 +593,14 @@ def RunCodeBlock(
             
             case "looks_switchcostumeto":
                 costume_name = target.getInputValue(*codeblock.inputs["COSTUME"], stack=stack)
+                if isinstance(costume_name, int|float|bool):
+                    costume_name = int(float(costume_name))
                 try:
-                    target.currentCostume = [i.name for i in target.costumes].index(str(costume_name))
+                    names = [i.name for i in target.costumes]
+                    target.currentCostume = names.index(str(costume_name))
                 except ValueError:
-                    try:
-                        target.currentCostume = [i.name for i in target.costumes].index(float(costume_name))
-                    except ValueError:
-                        target.currentCostume = int(float(costume_name))
+                    costume_index = int(float(costume_name)) - 1
+                    target.currentCostume = costume_index
             
             case "looks_nextcostume":
                 target.currentCostume = (target.currentCostume + 1) % len(target.costumes)
@@ -683,12 +683,12 @@ def RunCodeBlock(
                 bcname = target.getInputValue(*codeblock.inputs["BROADCAST_INPUT"], stack=stack)
                 if bcname not in ScratchObjects.Stage.broadcasts:
                     bcname = list(ScratchObjects.Stage.broadcasts.keys())[list(ScratchObjects.Stage.broadcasts.values()).index(bcname)]
-                for broadcast_codeblock, n in WhenReceiveNodes:
+                for ttarget, broadcast_codeblock, n in WhenReceiveNodes:
                     if bcname == n:
                         if codeblock.opcode == "event_broadcast":
-                            Thread(target=RunCodeBlock, args=(target, broadcast_codeblock, rtssManager.get_new(target, codeblock)), daemon=True).start()
+                            Thread(target=RunCodeBlock, args=(ttarget, broadcast_codeblock, rtssManager.get_new(ttarget, codeblock)), daemon=True).start()
                         else:
-                            RunCodeBlock(target, broadcast_codeblock, rtssManager.get_new(target, codeblock))
+                            RunCodeBlock(ttarget, broadcast_codeblock, rtssManager.get_new(ttarget, codeblock))
             
             case "control_wait":
                 sleep(float(target.getInputValue(*codeblock.inputs["DURATION"], stack=stack)))

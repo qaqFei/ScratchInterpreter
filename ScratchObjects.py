@@ -230,15 +230,24 @@ class ScratchTarget:
             case "operator_add":
                 n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
-                return float(n1) + float(n2)
+                try:
+                    return float(n1) + float(n2)
+                except ValueError:
+                    return 0.0
             case "operator_subtract":
                 n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
-                return float(n1) - float(n2)
+                try:
+                    return float(n1) - float(n2)
+                except ValueError:
+                    return 0.0
             case "operator_multiply":
                 n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
-                return float(n1) * float(n2)
+                try:
+                    return float(n1) * float(n2)
+                except ValueError:
+                    return 0.0
             case "operator_divide":
                 n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
@@ -246,18 +255,29 @@ class ScratchTarget:
                     return float(n1) / float(n2)
                 except ZeroDivisionError:
                     return float("inf")
+                except ValueError:
+                    return 0.0
             case "operator_random":
                 f, t = self.getInputValue(*code.inputs["FROM"], stack=stack), self.getInputValue(*code.inputs["TO"], stack=stack)
-                f, t = float(f), float(t)
+                try:
+                    f, t = float(f), float(t)
+                except ValueError:
+                    f, t = 0.0, 1.0
                 return f + (t - f) * random()
             case "operator_gt":
                 n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
-                return float(n1) > float(n2)
+                try:
+                    return float(n1) > float(n2)
+                except ValueError:
+                    return False
             case "operator_lt":
                 n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
-                return float(n1) < float(n2)
+                try:
+                    return float(n1) < float(n2)
+                except ValueError:
+                    return False
             case "operator_equals":
                 n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
                 n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
