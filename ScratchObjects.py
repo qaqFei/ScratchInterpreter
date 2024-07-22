@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from random import randint, random
 from threading import Thread
 from time import time, sleep
+from datetime import datetime
 import typing
 import math
 
@@ -149,7 +150,7 @@ class ScratchTarget:
         
         Thread(target=self._timer, daemon=True).start()
     
-    def ScratchEval(self, code:ScratchCodeBlock):
+    def ScratchEval(self, code:ScratchCodeBlock, stack: ScratchRuntimeStack|None = None):
         match code.opcode:
             case "motion_xposition":
                 return self.x
@@ -170,22 +171,22 @@ class ScratchTarget:
             case "sound_volume":
                 return self.volume
             case "sensing_touchingobject":
-                menuv = self.getInputValue(*code.inputs["TOUCHINGOBJECTMENU"])
+                menuv = self.getInputValue(*code.inputs["TOUCHINGOBJECTMENU"], stack=stack)
                 return ScratchEvalHelper(self, code, menuv=menuv)
             case "sensing_touchingcolor":
-                color = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"]))
+                color = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"], stack=stack))
                 return ScratchEvalHelper(self, code, color=color)
             case "sensing_coloristouchingcolor":
-                c1 = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"]))
-                c2 = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR2"]))
+                c1 = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR"], stack=stack))
+                c2 = ToolFuncs.unpack_color(self.getInputValue(*code.inputs["COLOR2"], stack=stack))
                 return ScratchEvalHelper(self, code, c1=c1, c2=c2)
             case "sensing_distanceto":
-                menuv = self.getInputValue(*code.inputs["DISTANCETOMENU"])
+                menuv = self.getInputValue(*code.inputs["DISTANCETOMENU"], stack=stack)
                 return ScratchEvalHelper(self, code, menuv=menuv)
             case "sensing_answer": 
                 return self.askans
             case "sensing_keypressed":
-                key = self.getInputValue(*code.inputs["KEY_OPTION"])
+                key = self.getInputValue(*code.inputs["KEY_OPTION"], stack=stack)
                 return ScratchEvalHelper(self, code, key=key)
             case "sensing_mousedown":
                 return ScratchEvalHelper(self, code)
@@ -198,70 +199,89 @@ class ScratchTarget:
             case "sensing_timer": 
                 return time() - self.timerst
             case "sensing_of":
-                datatarget_name = self.getInputValue(*code.inputs["OBJECT"])
+                datatarget_name = self.getInputValue(*code.inputs["OBJECT"], stack=stack)
                 targetproperty_name = code.fields["PROPERTY"][0] # why call ScratchEval to get this value? because this codeblock property value (data in fields) and execblock is the same codeblock.
                 return ScratchEvalHelper(self, code, datatarget_name=datatarget_name, targetproperty_name=targetproperty_name)
-            case "sensing_current": ...
+            case "sensing_current":
+                menuv = str(code.fields["CURRENTMENU"][0]).lower()
+                nt = datetime.now()
+                match menuv:
+                    case "year":
+                        return nt.year
+                    case "month":
+                        return nt.month
+                    case "date":
+                        return nt.day
+                    case "dayofweek":
+                        return ((nt.weekday() + 2 - 1) % 7) + 1
+                    case "hour":
+                        return nt.hour
+                    case "minute":
+                        return nt.minute
+                    case "second":
+                        return nt.second
+                    case _:
+                        return 0.0
             case "sensing_dayssince2000":
                 now = time() / 86400
                 return now - 946684800
             case "sensing_username":
                 return ""
             case "operator_add":
-                n1 = self.getInputValue(*code.inputs["NUM1"])
-                n2 = self.getInputValue(*code.inputs["NUM2"])
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
                 return float(n1) + float(n2)
             case "operator_subtract":
-                n1 = self.getInputValue(*code.inputs["NUM1"])
-                n2 = self.getInputValue(*code.inputs["NUM2"])
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
                 return float(n1) - float(n2)
             case "operator_multiply":
-                n1 = self.getInputValue(*code.inputs["NUM1"])
-                n2 = self.getInputValue(*code.inputs["NUM2"])
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
                 return float(n1) * float(n2)
             case "operator_divide":
-                n1 = self.getInputValue(*code.inputs["NUM1"])
-                n2 = self.getInputValue(*code.inputs["NUM2"])
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
                 try:
                     return float(n1) / float(n2)
                 except ZeroDivisionError:
                     return float("inf")
             case "operator_random":
-                f, t = self.getInputValue(*code.inputs["FROM"]), self.getInputValue(*code.inputs["TO"])
+                f, t = self.getInputValue(*code.inputs["FROM"], stack=stack), self.getInputValue(*code.inputs["TO"], stack=stack)
                 f, t = float(f), float(t)
                 return f + (t - f) * random()
             case "operator_gt":
-                n1 = self.getInputValue(*code.inputs["OPERAND1"])
-                n2 = self.getInputValue(*code.inputs["OPERAND2"])
+                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
                 return float(n1) > float(n2)
             case "operator_lt":
-                n1 = self.getInputValue(*code.inputs["OPERAND1"])
-                n2 = self.getInputValue(*code.inputs["OPERAND2"])
+                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
                 return float(n1) < float(n2)
             case "operator_equals":
-                n1 = self.getInputValue(*code.inputs["OPERAND1"])
-                n2 = self.getInputValue(*code.inputs["OPERAND2"])
+                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
                 try:
                     return float(n1) == float(n2)
                 except ValueError:
                     return str(n1) == str(n2)
             case "operator_and":
-                v1 = self.getInputValue(*code.inputs["OPERAND1"])
-                v2 = self.getInputValue(*code.inputs["OPERAND2"])
+                v1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
+                v2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
                 return bool(v1) and bool(v2)
             case "operator_or":
-                v1 = self.getInputValue(*code.inputs["OPERAND1"])
-                v2 = self.getInputValue(*code.inputs["OPERAND2"])
+                v1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
+                v2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
                 return bool(v1) or bool(v2)
             case "operator_not":
-                return not self.getInputValue(*code.inputs["OPERAND"])
+                return not self.getInputValue(*code.inputs["OPERAND"], stack=stack)
             case "operator_join":
-                v1 = self.getInputValue(*code.inputs["STRING1"])
-                v2 = self.getInputValue(*code.inputs["STRING2"])
+                v1 = self.getInputValue(*code.inputs["STRING1"], stack=stack)
+                v2 = self.getInputValue(*code.inputs["STRING2"], stack=stack)
                 return str(v1) + str(v2)
             case "operator_letter_of":
-                s = self.getInputValue(*code.inputs["STRING"])
-                i = int(self.getInputValue(*code.inputs["LETTER"]))
+                s = self.getInputValue(*code.inputs["STRING"], stack=stack)
+                i = int(self.getInputValue(*code.inputs["LETTER"], stack=stack))
                 try:
                     if i - 1 >= 0:
                         return s[i - 1]
@@ -269,20 +289,20 @@ class ScratchTarget:
                 except IndexError:
                     return ""
             case "operator_length":
-                return len(str(self.getInputValue(*code.inputs["STRING"])))
+                return len(str(self.getInputValue(*code.inputs["STRING"], stack=stack)))
             case "operator_contains":
-                m = self.getInputValue(*code.inputs["STRING1"])
-                c = self.getInputValue(*code.inputs["STRING2"])
+                m = self.getInputValue(*code.inputs["STRING1"], stack=stack)
+                c = self.getInputValue(*code.inputs["STRING2"], stack=stack)
                 return str(c) in str(m)
             case "operator_mod":
-                n1 = self.getInputValue(*code.inputs["NUM1"])
-                n2 = self.getInputValue(*code.inputs["NUM2"])
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
                 try:
                     return float(n1) % float(n2)
                 except ZeroDivisionError:
                     return float(n1)
             case "operator_round":
-                n = str(self.getInputValue(*code.inputs["NUM"]))
+                n = str(self.getInputValue(*code.inputs["NUM"], stack=stack))
                 if "." not in n:
                     return int(n)
                 s = n.split(".")[1]
@@ -292,7 +312,7 @@ class ScratchTarget:
                     return int(n) + 1
                 return int(n)
             case "operator_mathop":
-                n = float(self.getInputValue(*code.inputs["NUM"]))
+                n = float(self.getInputValue(*code.inputs["NUM"], stack=stack))
                 try:
                     match code.fields["OPERATOR"][0]:
                         case "abs":
@@ -327,30 +347,30 @@ class ScratchTarget:
                     return 0.0
             case "data_variable":
                 vn = code.params["VARIABLE"]
-                gname = [i.name for i in Stage.variables.values()]
-                lname = [i.name for i in self.variables.values()]
-                if vn in gname:
-                    e3 = list(Stage.variables.keys())[gname.index(vn)]
-                elif vn in lname:
-                    e3 = list(self.variables.keys())[lname.index(vn)]
+                gnames = [i.name for i in Stage.variables.values()]
+                lnames = [i.name for i in self.variables.values()]
+                if vn in gnames:
+                    e3 = list(Stage.variables.keys())[gnames.index(vn)]
+                elif vn in lnames:
+                    e3 = list(self.variables.keys())[lnames.index(vn)]
                 else:
                     return "0.0"
-                return self.getInputValue(12, vn, e3)
+                return self.getInputValue(12, vn, e3, stack=stack)
             case "data_listcontents":
                 vn = code.params["LIST"]
-                gname = [Stage.lists[i].name for i in Stage.lists.keys()]
-                lname = [self.lists[i].name for i in self.lists.keys()]
-                if vn in gname:
-                    e3 = list(Stage.lists.keys())[gname.index(vn)]
-                elif vn in lname:
-                    e3 = list(self.lists.keys())[lname.index(vn)]
+                gnames = [Stage.lists[i].name for i in Stage.lists.keys()]
+                lnames = [self.lists[i].name for i in self.lists.keys()]
+                if vn in gnames:
+                    e3 = list(Stage.lists.keys())[gnames.index(vn)]
+                elif vn in lnames:
+                    e3 = list(self.lists.keys())[lnames.index(vn)]
                 else:
                     return "0.0"
-                return self.getInputValue(13, vn, e3)
+                return self.getInputValue(13, vn, e3, stack=stack)
             case "data_itemoflist":
                 lid = code.fields["LIST"][1]
                 pylist = self._get_listByid(lid).items
-                i = int(self.getInputValue(*code.inputs["INDEX"]))
+                i = int(self.getInputValue(*code.inputs["INDEX"], stack=stack))
                 try:
                     if i - 1 >= 0:
                         return pylist[i - 1]
@@ -360,7 +380,7 @@ class ScratchTarget:
             case "data_itemnumoflist":
                 lid = code.fields["LIST"][1]
                 pylist = self._get_listByid(lid).items
-                item = self.getInputValue(*code.inputs["ITEM"])
+                item = self.getInputValue(*code.inputs["ITEM"], stack=stack)
                 try:
                     return pylist.index(item) + 1
                 except ValueError:
@@ -371,10 +391,12 @@ class ScratchTarget:
             case "data_listcontainsitem":
                 lid = code.fields["LIST"][1]
                 pylist = self._get_listByid(lid).items
-                item = self.getInputValue(*code.inputs["ITEM"])
+                item = self.getInputValue(*code.inputs["ITEM"], stack=stack)
                 return item in pylist
             case "music_getTempo":
                 return Stage.tempo
+            case "translate_getViewerLanguage":
+                return Stage.textToSpeechLanguage
             case "motion_goto_menu":
                 return code.fields["TO"][0]
             case "motion_glideto_menu":
@@ -407,13 +429,16 @@ class ScratchTarget:
                 return code.fields["DRAG_MODE"][0]
             case "sensing_of_object_menu":
                 return code.fields["OBJECT"][0]
+            case "argument_reporter_string_number" | "argument_reporter_boolean":
+                vname = code.fields["VALUE"][0]
+                return stack.funcargs[vname]
             case _:
                 return "0.0"
     
-    def _giv_run(self, value: str|list):
+    def _giv_run(self, value: str|list, stack: ScratchRuntimeStack|None):
         if isinstance(value, str):
-            return self.ScratchEval(self.blocks[value])
-        return self.getInputValue(*value)
+            return self.ScratchEval(self.blocks[value], stack)
+        return self.getInputValue(*value, stack=stack)
     
     def _giv_get(self, value: str|list):
         if isinstance(value, str):
@@ -432,22 +457,22 @@ class ScratchTarget:
         except KeyError:
             return Stage.lists[lid]
     
-    def getInputValue(self, itype: int, value: str|list, ele3 = None, ele4 = None, ele5 = None, r2c = True, *eles):
+    def getInputValue(self, itype: int, value: str|list, ele3 = None, ele4 = None, ele5 = None, r2c = True, stack: ScratchRuntimeStack|None = None, *eles):
         match itype:
             case 1:
                 if isinstance(value, str):
                     if r2c:
-                        return self.ScratchEval(self.blocks[value])
+                        return self.ScratchEval(self.blocks[value], stack)
                     return self.blocks[value]
-                return self.getInputValue(*value)
+                return self.getInputValue(*value, stack=stack)
             case 2:
                 if r2c:
-                    return self._giv_run(value)
+                    return self._giv_run(value, stack)
                 else:
                     return self.blocks[value]
             case 3:
                 if r2c:
-                    return self._giv_run(value)
+                    return self._giv_run(value, stack)
                 else:
                     return self.blocks[value]
             case 4|5|6|7|8:
@@ -485,7 +510,7 @@ class ScratchContext:
     
     def __next__(self) -> ScratchCodeBlock|None:
         if self.running is self.master:
-            self.running = self.target.getInputValue(*self.running.inputs[self.substack], r2c=False)
+            self.running = self.target.getInputValue(*self.running.inputs[self.substack], r2c=False) # most get codeblock, so donot input stack to func.
             if self.running is None:
                 raise StopIteration
         else:
@@ -503,6 +528,7 @@ class ScratchRuntimeStack:
     stack_first: ScratchCodeBlock
     stack_id: str = ""
     stopped: bool = False
+    funcargs: dict[str, int|float|str|bool]|None = None
     
     def __post_init__(self):
         self.stack_id = f"RuntimeStack_{time() * randint(0, 2 << 31)}"
@@ -511,8 +537,17 @@ class ScratchRuntimeStack:
 class ScratchRuntimeStackManager:
     stacks: list[ScratchRuntimeStack]
 
-    def get_new(self, target: ScratchTarget, codeblock: ScratchCodeBlock) -> ScratchRuntimeStack:
-        stack = ScratchRuntimeStack(target, codeblock)
+    def get_new(
+        self,
+        target: ScratchTarget,
+        codeblock: ScratchCodeBlock,
+        funcargs: dict[str, int|float|str|bool]|None = None
+    ) -> ScratchRuntimeStack:
+        stack = ScratchRuntimeStack(
+            target=target,
+            stack_first=codeblock,
+            funcargs=funcargs
+        )
         self.stacks.append(stack)
         return stack
 

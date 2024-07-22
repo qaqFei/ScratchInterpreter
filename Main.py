@@ -292,6 +292,7 @@ def MainInterpreter():
     global WhenGtNodes
     global WhenReceiveNodes
     global WhenStartAsCloneNodes
+    global ScratchFunctions
     
     ScratchObjects.ScratchEvalHelper = ScratchEvalHelper
     
@@ -303,6 +304,15 @@ def MainInterpreter():
     WhenGtNodes = [[(t, v, float(t.getInputValue(*v.inputs["VALUE"])), t.ScratchEval(v)), True, None] for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whengreaterthan"]
     WhenReceiveNodes = [(v, t.ScratchEval(v)) for t in project_object.targets for v in t.blocks.values() if v.opcode == "event_whenbroadcastreceived"]
     WhenStartAsCloneNodes = [(t, v) for t in project_object.targets for v in t.blocks.values() if v.opcode == "control_start_as_clone"]
+    ScratchFunctions = [(t, v, t.getInputValue(*v.inputs["custom_block"], r2c=False).proccode) for t in project_object.targets for v in t.blocks.values() if v.opcode == "procedures_definition"]
+    
+    for index, data in enumerate(ScratchFunctions):
+        t, v, _ = data
+        custom_block = t.getInputValue(*v.inputs["custom_block"], r2c=False)
+        argids = eval(custom_block.argumentids)
+        argnames = eval(custom_block.argumentnames)
+        data += ({k: v for k, v in zip(argids, argnames)}, )
+        ScratchFunctions[index] = data
     
     window.jsapi.set_attr("KeyPress", KeyPress)
     window.jsapi.set_attr("KeyUp", KeyUp)
@@ -453,18 +463,18 @@ def RunCodeBlock(
             case "motion_movesteps":
                 target.x, target.y = ToolFuncs.rotate_point(
                     target.x, target.y, target.direction,
-                    float(target.getInputValue(*codeblock.inputs["STEPS"]))
+                    float(target.getInputValue(*codeblock.inputs["STEPS"], stack=stack))
                 )
                 FixOutStageTarget(target)
                 
             case "motion_turnright":
-                target.direction += float(target.getInputValue(*codeblock.inputs["DEGREES"]))
+                target.direction += float(target.getInputValue(*codeblock.inputs["DEGREES"], stack=stack))
                 
             case "motion_turnleft":
-                target.direction -= float(target.getInputValue(*codeblock.inputs["DEGREES"]))
+                target.direction -= float(target.getInputValue(*codeblock.inputs["DEGREES"], stack=stack))
                 
             case "motion_goto":
-                menuv = target.getInputValue(*codeblock.inputs["TO"])
+                menuv = target.getInputValue(*codeblock.inputs["TO"], stack=stack)
                 match menuv:
                     case "_random_":
                         target.x, target.y = randint(stage_mleft, stage_mright), randint(stage_mbottom, stage_mtop)
@@ -476,15 +486,15 @@ def RunCodeBlock(
                 FixOutStageTarget(target)
                 
             case "motion_gotoxy":
-                target.x, target.y = float(target.getInputValue(*codeblock.inputs["X"])), float(target.getInputValue(*codeblock.inputs["Y"]))
+                target.x, target.y = float(target.getInputValue(*codeblock.inputs["X"], stack=stack)), float(target.getInputValue(*codeblock.inputs["Y"], stack=stack))
                 FixOutStageTarget(target)
                 
             case "motion_glideto" | "motion_glidesecstoxy":
-                asec = float(target.getInputValue(*codeblock.inputs["SECS"]))
+                asec = float(target.getInputValue(*codeblock.inputs["SECS"], stack=stack))
                 rx, ry = target.x, target.y
                 
                 if codeblock.opcode == "motion_glideto":
-                    menuv = target.getInputValue(*codeblock.inputs["TO"])
+                    menuv = target.getInputValue(*codeblock.inputs["TO"], stack=stack)
                     match menuv:
                         case "_random_":
                             tx, ty = randint(stage_mleft, stage_mright), randint(stage_mbottom, stage_mtop)
@@ -494,7 +504,7 @@ def RunCodeBlock(
                             movetarget = [i for i in project_object.targets if i.name == menuv][0]
                             tx, ty = movetarget.x, movetarget.y
                 else: # motion_glidesecstoxy
-                    tx, ty = float(target.getInputValue(*codeblock.inputs["X"])), float(target.getInputValue(*codeblock.inputs["Y"]))
+                    tx, ty = float(target.getInputValue(*codeblock.inputs["X"], stack=stack)), float(target.getInputValue(*codeblock.inputs["Y"], stack=stack))
                         
                 ast = time()
                 while time() - ast < asec:
@@ -508,10 +518,10 @@ def RunCodeBlock(
                 FixOutStageTarget(target)
                 
             case "motion_pointindirection":
-                target.direction = float(target.getInputValue(*codeblock.inputs["DIRECTION"]))
+                target.direction = float(target.getInputValue(*codeblock.inputs["DIRECTION"], stack=stack))
                 
             case "motion_pointtowards":
-                menuv = target.getInputValue(*codeblock.inputs["TOWARDS"])
+                menuv = target.getInputValue(*codeblock.inputs["TOWARDS"], stack=stack)
                 match menuv:
                     case "_mouse_":
                         twx, twy = getMousePosOfScratch()
@@ -523,21 +533,21 @@ def RunCodeBlock(
                 target.direction = 90 - math.degrees(math.atan2(twy, twx))
             
             case "motion_changexby":
-                dx = float(target.getInputValue(*codeblock.inputs["DX"]))
+                dx = float(target.getInputValue(*codeblock.inputs["DX"], stack=stack))
                 target.x += dx
                 FixOutStageTarget(target)
             
             case "motion_setx":
-                target.x = float(target.getInputValue(*codeblock.inputs["X"]))
+                target.x = float(target.getInputValue(*codeblock.inputs["X"], stack=stack))
                 FixOutStageTarget(target)
             
             case "motion_changeyby":
-                dy = float(target.getInputValue(*codeblock.inputs["DY"]))
+                dy = float(target.getInputValue(*codeblock.inputs["DY"], stack=stack))
                 target.y += dy
                 FixOutStageTarget(target)
             
             case "motion_sety":
-                target.y = float(target.getInputValue(*codeblock.inputs["Y"]))
+                target.y = float(target.getInputValue(*codeblock.inputs["Y"], stack=stack))
                 FixOutStageTarget(target)
             
             case "motion_ifonedgebounce":
@@ -565,32 +575,38 @@ def RunCodeBlock(
                 target.rotationStyle = codeblock.fields["STYLE"][0]
             
             case "looks_sayforsecs":
-                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
-                waitms = int(float(target.getInputValue(*codeblock.inputs["SECS"])) * 1000)
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"], stack=stack))
+                waitms = int(float(target.getInputValue(*codeblock.inputs["SECS"], stack=stack)) * 1000)
                 ToolFuncs.MessageBoxTimeout(f"{target.name} is saying", msg, 0x40, waitms)
             
             case "looks_say":
-                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"], stack=stack))
                 Thread(target=ToolFuncs.MessageBox, args=(f"{target.name} is saying", msg, 0x40), daemon=True).start()
             
             case "looks_thinkforsecs":
-                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
-                waitms = int(float(target.getInputValue(*codeblock.inputs["SECS"])) * 1000)
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"], stack=stack))
+                waitms = int(float(target.getInputValue(*codeblock.inputs["SECS"], stack=stack)) * 1000)
                 ToolFuncs.MessageBoxTimeout(f"{target.name} is thinking", msg, 0x40, waitms)
             
             case "looks_think":
-                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"]))
+                msg = str(target.getInputValue(*codeblock.inputs["MESSAGE"], stack=stack))
                 Thread(target=ToolFuncs.MessageBox, args=(f"{target.name} is thinking", msg, 0x40), daemon=True).start()
             
             case "looks_switchcostumeto":
-                costume_name = target.getInputValue(*codeblock.inputs["COSTUME"])
-                target.currentCostume = [i.name for i in target.costumes].index(str(costume_name))
+                costume_name = target.getInputValue(*codeblock.inputs["COSTUME"], stack=stack)
+                try:
+                    target.currentCostume = [i.name for i in target.costumes].index(str(costume_name))
+                except ValueError:
+                    try:
+                        target.currentCostume = [i.name for i in target.costumes].index(float(costume_name))
+                    except ValueError:
+                        target.currentCostume = int(float(costume_name))
             
             case "looks_nextcostume":
                 target.currentCostume = (target.currentCostume + 1) % len(target.costumes)
             
             case "looks_switchbackdropto":
-                backdrop_name = target.getInputValue(*codeblock.inputs["BACKDROP"])
+                backdrop_name = target.getInputValue(*codeblock.inputs["BACKDROP"], stack=stack)
                 match backdrop_name:
                     case "next backdrop":
                         ScratchObjects.Stage.currentCostume = (ScratchObjects.Stage.currentCostume + 1) % len(ScratchObjects.Stage.costumes)
@@ -611,11 +627,11 @@ def RunCodeBlock(
                 ChangeBgCallback(target)
             
             case "looks_changesizeby":
-                target.size += float(target.getInputValue(*codeblock.inputs["CHANGE"]))
+                target.size += float(target.getInputValue(*codeblock.inputs["CHANGE"], stack=stack))
                 FixTooBigTarget(target)
             
             case "looks_setsizeto":
-                target.size = float(target.getInputValue(*codeblock.inputs["SIZE"]))
+                target.size = float(target.getInputValue(*codeblock.inputs["SIZE"], stack=stack))
                 FixTooBigTarget(target)
             
             case "looks_changeeffectby": ...
@@ -635,7 +651,7 @@ def RunCodeBlock(
             case "looks_goforwardbackwardlayers": ...
             
             case "sound_playuntildone" | "sound_play":
-                menuv = target.getInputValue(*codeblock.inputs["SOUND_MENU"])
+                menuv = target.getInputValue(*codeblock.inputs["SOUND_MENU"], stack=stack)
                 sound_data = [i for i in target.sounds if i.name == menuv][0].data
                 soundbuffers[sound_data], waitt = PlaySound.Play(sound_data)
                 
@@ -652,19 +668,19 @@ def RunCodeBlock(
             case "sound_cleareffects": ...
             
             case "sound_changevolumeby":
-                target.volume += float(target.getInputValue(*codeblock.inputs["VOLUME"]))
+                target.volume += float(target.getInputValue(*codeblock.inputs["VOLUME"], stack=stack))
                 if target.volume < 0.0: target.volume = 0.0
                 elif target.volume > 100.0: target.volume = 100.0
                 PlaySound.setVolume(target.volume / 100.0)
             
             case "sound_setvolumeto":
-                target.volume = float(target.getInputValue(*codeblock.inputs["VOLUME"]))
+                target.volume = float(target.getInputValue(*codeblock.inputs["VOLUME"], stack=stack))
                 if target.volume < 0.0: target.volume = 0.0
                 elif target.volume > 100.0: target.volume = 100.0
                 PlaySound.setVolume(target.volume / 100.0)
             
             case "event_broadcast" | "event_broadcastandwait":
-                bcname = target.getInputValue(*codeblock.inputs["BROADCAST_INPUT"])
+                bcname = target.getInputValue(*codeblock.inputs["BROADCAST_INPUT"], stack=stack)
                 if bcname not in ScratchObjects.Stage.broadcasts:
                     bcname = list(ScratchObjects.Stage.broadcasts.keys())[list(ScratchObjects.Stage.broadcasts.values()).index(bcname)]
                 for broadcast_codeblock, n in WhenReceiveNodes:
@@ -675,7 +691,7 @@ def RunCodeBlock(
                             RunCodeBlock(target, broadcast_codeblock, rtssManager.get_new(target, codeblock))
             
             case "control_wait":
-                sleep(float(target.getInputValue(*codeblock.inputs["DURATION"])))
+                sleep(float(target.getInputValue(*codeblock.inputs["DURATION"], stack=stack)))
             
             case "control_repeat":
                 Run_Repeat(target, codeblock, stack)
@@ -684,23 +700,23 @@ def RunCodeBlock(
                 Run_Forever(target, codeblock, stack)
             
             case "control_if":
-                ifvar = target.getInputValue(*codeblock.inputs["CONDITION"])
+                ifvar = target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack)
                 if ifvar:
                     Run_If(target, codeblock, stack)
             
             case "control_if_else":
-                ifvar = target.getInputValue(*codeblock.inputs["CONDITION"])
+                ifvar = target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack)
                 Run_IfElse(target, codeblock, ifvar, stack)
             
             case "control_wait_until":
-                while not target.getInputValue(*codeblock.inputs["CONDITION"]): sleep(RunWait)
+                while not target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack): sleep(RunWait)
             
             case "control_repeat_until":
-                get_ifvar = lambda: target.getInputValue(*codeblock.inputs["CONDITION"])
+                get_ifvar = lambda: target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack)
                 Run_RepeatUntil(target, codeblock, get_ifvar, stack)
             
             case "control_stop":
-                stopv = target.ScratchEval(codeblock).split(" ")[0]
+                stopv = target.ScratchEval(codeblock, stack).split(" ")[0]
                 match stopv:
                     case "all":
                         for i in rtssManager.stacks:
@@ -716,7 +732,7 @@ def RunCodeBlock(
                             DestoryStack(i)
             
             case "control_create_clone_of":
-                menuv = target.getInputValue(*codeblock.inputs["CLONE_OPTION"])
+                menuv = target.getInputValue(*codeblock.inputs["CLONE_OPTION"], stack=stack)
                 match menuv:
                     case "_myself_":
                         clone_master = target
@@ -739,17 +755,124 @@ def RunCodeBlock(
                         DestoryStack(i)
 
             case "sensing_askandwait":
-                question = str(target.getInputValue(*codeblock.inputs["QUESTION"]))
+                question = str(target.getInputValue(*codeblock.inputs["QUESTION"], stack=stack))
                 while True:
                     answer = window.run_js_code(f"prompt('{window.process_code_string_syntax_tostring(f"{target.name} is asking:\n    {question}")}');")
                     if answer is not None: break
                 target.askans = answer
             
             case "sensing_setdragmode":
-                target.draggable = target.ScratchEval(codeblock) == "draggable"
+                target.draggable = target.ScratchEval(codeblock, stack) == "draggable"
             
             case "sensing_resettimer":
                 target.timerst = time()
+            
+            case "procedures_call":
+                proccode = codeblock.proccode
+                ScratchFunction, argmap = [(i, argmap) for t, i, pcode, argmap in ScratchFunctions if t is target and pcode == proccode][0]
+                argumentdefaults = eval(target.getInputValue(*ScratchFunction.inputs["custom_block"], r2c=False, stack=stack).argumentdefaults)
+                args = {}
+                i = 0
+                for k, v in codeblock.inputs.items():
+                    try: args[k] = target.getInputValue(*v, stack=stack)
+                    except Exception: args[k] = argumentdefaults[i]
+                    i += 1
+                newargs = {}
+                for k, v in args.items():
+                    newargs[argmap[k]] = v
+                FunctionStack = rtssManager.get_new(target, codeblock, newargs)
+                RunCodeBlock(target, ScratchFunction, FunctionStack)
+            
+            case "data_setvariableto":
+                vn = codeblock.fields["VARIABLE"][0]
+                vv = target.getInputValue(*codeblock.inputs["VALUE"], stack=stack)
+                globalvars = [i for i in ScratchObjects.Stage.variables.values() if i.name == vn]
+                localvars = [i for i in target.variables.values() if i.name == vn]
+                if localvars:
+                    v = localvars[0]
+                elif globalvars:
+                    v = globalvars[0]
+                v.value = vv
+            
+            case "data_changevariableby":
+                vn = codeblock.fields["VARIABLE"][0]
+                vv = target.getInputValue(*codeblock.inputs["VALUE"], stack=stack)
+                globalvars = [i for i in ScratchObjects.Stage.variables.values() if i.name == vn]
+                localvars = [i for i in target.variables.values() if i.name == vn]
+                if localvars:
+                    v = localvars[0]
+                elif globalvars:
+                    v = globalvars[0]
+                try:
+                    v.value = float(v.value)
+                    v.value += float(vv)
+                    if v.value % 1.0 == 0.0:
+                        v.value = int(v.value)
+                except ValueError:
+                    v.value += str(vv)
+            
+            case "data_addtolist":
+                vn = codeblock.fields["LIST"][0]
+                vv = target.getInputValue(*codeblock.inputs["ITEM"], stack=stack)
+                globallists = [i for i in ScratchObjects.Stage.lists.values() if i.name == vn]
+                locallists = [i for i in target.lists.values() if i.name == vn]
+                if locallists:
+                    v = locallists[0]
+                elif globallists:
+                    v = globallists[0]
+                v.items.append(vv)
+            
+            case "data_deleteoflist":
+                vn = codeblock.fields["LIST"][0]
+                vi = int(target.getInputValue(*codeblock.inputs["INDEX"], stack=stack))
+                globallists = [i for i in ScratchObjects.Stage.lists.values() if i.name == vn]
+                locallists = [i for i in target.lists.values() if i.name == vn]
+                if locallists:
+                    v = locallists[0]
+                elif globallists:
+                    v = globallists[0]
+                if vi - 1 >= 0:
+                    del v.items[vi - 1]
+            
+            case "data_deletealloflist":
+                vn = codeblock.fields["LIST"][0]
+                globallists = [i for i in ScratchObjects.Stage.lists.values() if i.name == vn]
+                locallists = [i for i in target.lists.values() if i.name == vn]
+                if locallists:
+                    v = locallists[0]
+                elif globallists:
+                    v = globallists[0]
+                v.items.clear()
+            
+            case "data_insertatlist":
+                vn = codeblock.fields["LIST"][0]
+                vi = int(target.getInputValue(*codeblock.inputs["INDEX"], stack=stack))
+                vv = target.getInputValue(*codeblock.inputs["ITEM"], stack=stack)
+                globallists = [i for i in ScratchObjects.Stage.lists.values() if i.name == vn]
+                locallists = [i for i in target.lists.values() if i.name == vn]
+                if locallists:
+                    v = locallists[0]
+                elif globallists:
+                    v = globallists[0]
+                if vi - 1 >= 0:
+                    v.items.insert(vi - 1, vv)
+            
+            case "data_replaceitemoflist":
+                vn = codeblock.fields["LIST"][0]
+                vi = int(target.getInputValue(*codeblock.inputs["INDEX"], stack=stack))
+                vv = target.getInputValue(*codeblock.inputs["ITEM"], stack=stack)
+                globallists = [i for i in ScratchObjects.Stage.lists.values() if i.name == vn]
+                locallists = [i for i in target.lists.values() if i.name == vn]
+                if locallists:
+                    v = locallists[0]
+                elif globallists:
+                    v = globallists[0]
+                if vi - 1 >= 0:
+                    v.items[vi - 1] = vv
+            
+            case "data_showvariable": ...
+            
+            case "data_hidevariable": ...
     except Exception as e:
         print(f"Error in RunCodeBlock: {e.__class__}, {e}")
     
@@ -758,7 +881,12 @@ def RunCodeBlock(
         try:
             RunCodeBlock(target, target.blocks[codeblock.next], stack)
         except KeyError as e:
-            print(f"Error in RunCodeBlock: Unknow Codeblock {e.__class__}, {e}")
+            try:
+                newtarget, newblock = [(t, b) for t in project_object.targets for bid, b in t.blocks.items() if bid == codeblock.next][0]
+                stack.target = newtarget
+                RunCodeBlock(newtarget, newblock, stack)
+            except IndexError as e:
+                print(f"Error in RunCodeBlock: Unknow Codeblock {e.__class__}, {e}")
 
 @ToolFuncs.ThreadFunc
 def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
@@ -775,7 +903,7 @@ def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.
 
 @ToolFuncs.ThreadFunc
 def Run_Repeat(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
-    looptimes = int(target.getInputValue(*codeblock.inputs["TIMES"]))
+    looptimes = int(target.getInputValue(*codeblock.inputs["TIMES"], stack=stack))
     if looptimes <= 0: return None
     if codeblock.inputs["SUBSTACK"][1] is None:
         for _ in [None] * looptimes:
