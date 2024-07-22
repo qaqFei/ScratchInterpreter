@@ -300,7 +300,7 @@ class ScratchTarget:
                 i = int(self.getInputValue(*code.inputs["LETTER"], stack=stack)) if "LETTER" in code.inputs else 1
                 try:
                     if i - 1 >= 0:
-                        return s[i - 1]
+                        return str(s)[i - 1]
                     raise IndexError
                 except IndexError:
                     return ""
