@@ -5,12 +5,14 @@ from time import time, sleep
 from random import randint
 from shutil import rmtree
 from threading import Thread
+import builtins
 import copy
 import math
 import typing
 
 from PIL import Image
 from win32api import GetCursorPos
+import pywintypes
 import webcvapis
 
 import ToolFuncs
@@ -68,6 +70,18 @@ rtssManager = ScratchObjects.ScratchRuntimeStackManager([])
 KeyStates = {}
 MouseStates = {}
 Number = int|float
+
+builtins._float = builtins.float
+class newFloat(builtins._float):
+    def __new__(cls, n):
+        if isinstance(n, str):
+            while "--" in n:
+                n = n.replace("--", "")
+        v = builtins._float(n)
+        if v % 1 == 0:
+            return int(v)
+        return v
+builtins.float = newFloat
 
 def KeyPress(
     key: str,
@@ -779,6 +793,7 @@ def RunCodeBlock(
             case "procedures_call":
                 proccode = codeblock.proccode
                 ScratchFunction, argmap = [(i, argmap) for t, i, pcode, argmap in ScratchFunctions if (t is target or target in t.clones) and pcode == proccode][0]
+                false, true, null = False, True, None
                 argumentdefaults = eval(target.getInputValue(*ScratchFunction.inputs["custom_block"], r2c=False, stack=stack).argumentdefaults)
                 args = {}
                 i = 0
@@ -885,7 +900,8 @@ def RunCodeBlock(
             
             case "__python_pass__": pass
     except Exception as e:
-        print(f"Error in RunCodeBlock: {e.__class__}, {e}")
+        if not isinstance(e, pywintypes.error):
+            print(f"Error in RunCodeBlock: {e.__class__}, {e}")
     
     sleep(RunWait)
     if codeblock.next and runnext:
