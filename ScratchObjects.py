@@ -39,21 +39,14 @@ class ScratchCodeBlock:
     opcode: str
     params: dict[str, str]
     next: str|None
-    parent: str|None
     inputs: dict[str, list]
     fields: dict[str, list]
-    shadow: bool
-    topLevel: bool
     
     # mutations only
-    tagName: str|None
-    children: list|None
     proccode: str|None
     argumentids: list[str]|None
-    warp: bool|None
     argumentnames: list[str]|None
     argumentdefaults: list[str]|None
-    hasnext: bool|None
 
 @dataclass
 class ScratchAsset:
@@ -150,6 +143,9 @@ class ScratchTarget:
         
         Thread(target=self._timer, daemon=True).start()
     
+    def __eq__(self, oth):
+        return self is oth
+    
     def ScratchEval(self, code:ScratchCodeBlock, stack: ScratchRuntimeStack|None = None):
         match code.opcode:
             case "motion_xposition":
@@ -228,29 +224,29 @@ class ScratchTarget:
             case "sensing_username":
                 return ""
             case "operator_add":
-                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack) if "NUM1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack) if "NUM2" in code.inputs else 0.0
                 try:
                     return float(n1) + float(n2)
                 except ValueError:
                     return 0.0
             case "operator_subtract":
-                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack) if "NUM1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack) if "NUM2" in code.inputs else 0.0
                 try:
                     return float(n1) - float(n2)
                 except ValueError:
                     return 0.0
             case "operator_multiply":
-                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack) if "NUM1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack) if "NUM2" in code.inputs else 0.0
                 try:
                     return float(n1) * float(n2)
                 except ValueError:
                     return 0.0
             case "operator_divide":
-                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack) if "NUM1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack) if "NUM2" in code.inputs else 0.0
                 try:
                     return float(n1) / float(n2)
                 except ZeroDivisionError:
@@ -258,50 +254,50 @@ class ScratchTarget:
                 except ValueError:
                     return 0.0
             case "operator_random":
-                f, t = self.getInputValue(*code.inputs["FROM"], stack=stack), self.getInputValue(*code.inputs["TO"], stack=stack)
+                f, t = self.getInputValue(*code.inputs["FROM"], stack=stack) if "FROM" in code.inputs else 0.0, self.getInputValue(*code.inputs["TO"], stack=stack) if "TO" in code.inputs else 1.0
                 try:
                     f, t = float(f), float(t)
                 except ValueError:
                     f, t = 0.0, 1.0
                 return f + (t - f) * random()
             case "operator_gt":
-                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack) if "OPERAND1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack) if "OPERAND2" in code.inputs else 0.0
                 try:
                     return float(n1) > float(n2)
                 except ValueError:
                     return False
             case "operator_lt":
-                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack) if "OPERAND1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack) if "OPERAND2" in code.inputs else 0.0
                 try:
                     return float(n1) < float(n2)
                 except ValueError:
                     return False
             case "operator_equals":
-                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack) if "OPERAND1" in code.inputs else ""
+                n2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack) if "OPERAND2" in code.inputs else ""
                 try:
                     return float(n1) == float(n2)
                 except ValueError:
                     return str(n1) == str(n2)
             case "operator_and":
-                v1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
-                v2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
+                v1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack) if "OPERAND1" in code.inputs else False
+                v2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack) if "OPERAND2" in code.inputs else False
                 return bool(v1) and bool(v2)
             case "operator_or":
-                v1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack)
-                v2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack)
+                v1 = self.getInputValue(*code.inputs["OPERAND1"], stack=stack) if "OPERAND1" in code.inputs else False
+                v2 = self.getInputValue(*code.inputs["OPERAND2"], stack=stack) if "OPERAND2" in code.inputs else False
                 return bool(v1) or bool(v2)
             case "operator_not":
-                return not self.getInputValue(*code.inputs["OPERAND"], stack=stack)
+                return not self.getInputValue(*code.inputs["OPERAND"], stack=stack) if "OPERAND" in code.inputs else False
             case "operator_join":
-                v1 = self.getInputValue(*code.inputs["STRING1"], stack=stack)
-                v2 = self.getInputValue(*code.inputs["STRING2"], stack=stack)
+                v1 = self.getInputValue(*code.inputs["STRING1"], stack=stack) if "STRING1" in code.inputs else ""
+                v2 = self.getInputValue(*code.inputs["STRING2"], stack=stack) if "STRING2" in code.inputs else ""
                 return str(v1) + str(v2)
             case "operator_letter_of":
-                s = self.getInputValue(*code.inputs["STRING"], stack=stack)
-                i = int(self.getInputValue(*code.inputs["LETTER"], stack=stack))
+                s = self.getInputValue(*code.inputs["STRING"], stack=stack) if "STRING" in code.inputs else ""
+                i = int(self.getInputValue(*code.inputs["LETTER"], stack=stack)) if "LETTER" in code.inputs else 1
                 try:
                     if i - 1 >= 0:
                         return s[i - 1]
@@ -309,20 +305,20 @@ class ScratchTarget:
                 except IndexError:
                     return ""
             case "operator_length":
-                return len(str(self.getInputValue(*code.inputs["STRING"], stack=stack)))
+                return len(str(self.getInputValue(*code.inputs["STRING"], stack=stack))) if "STRING" in code.inputs else ""
             case "operator_contains":
-                m = self.getInputValue(*code.inputs["STRING1"], stack=stack)
-                c = self.getInputValue(*code.inputs["STRING2"], stack=stack)
+                m = self.getInputValue(*code.inputs["STRING1"], stack=stack) if "STRING1" in code.inputs else ""
+                c = self.getInputValue(*code.inputs["STRING2"], stack=stack) if "STRING2" in code.inputs else ""
                 return str(c) in str(m)
             case "operator_mod":
-                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack)
-                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack)
+                n1 = self.getInputValue(*code.inputs["NUM1"], stack=stack) if "NUM1" in code.inputs else 0.0
+                n2 = self.getInputValue(*code.inputs["NUM2"], stack=stack) if "NUM2" in code.inputs else 0.0
                 try:
                     return float(n1) % float(n2)
                 except ZeroDivisionError:
                     return float(n1)
             case "operator_round":
-                n = str(self.getInputValue(*code.inputs["NUM"], stack=stack))
+                n = str(self.getInputValue(*code.inputs["NUM"], stack=stack)) if "NUM" in code.inputs else "0.0"
                 if "." not in n:
                     return int(n)
                 s = n.split(".")[1]
@@ -332,7 +328,7 @@ class ScratchTarget:
                     return int(n) + 1
                 return int(n)
             case "operator_mathop":
-                n = float(self.getInputValue(*code.inputs["NUM"], stack=stack))
+                n = float(self.getInputValue(*code.inputs["NUM"], stack=stack)) if "NUM" in code.inputs else 0.0
                 try:
                     match code.fields["OPERATOR"][0]:
                         case "abs":
@@ -477,7 +473,7 @@ class ScratchTarget:
         except KeyError:
             return Stage.lists[lid]
     
-    def getInputValue(self, itype: int, value: str|list, ele3 = None, ele4 = None, ele5 = None, r2c = True, stack: ScratchRuntimeStack|None = None, *eles):
+    def getInputValue(self, itype: int, value: str|list|ScratchCodeBlock, ele3 = None, ele4 = None, ele5 = None, r2c = True, stack: ScratchRuntimeStack|None = None, *eles):
         match itype:
             case 1:
                 if isinstance(value, str):
@@ -505,6 +501,11 @@ class ScratchTarget:
                 return self._get_variableByid(ele3).value
             case 13:
                 return " ".join(map(str, self._get_listByid(ele3).items))
+            case 512:
+                if r2c:
+                    return self.ScratchEval(value, stack)
+                else:
+                    return value
             case _:
                 return "0.0"
     

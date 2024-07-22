@@ -743,6 +743,7 @@ def RunCodeBlock(
                 clone_target = copy.copy(clone_master)
                 clone_target.clones = []
                 clone_target.isClone = True
+                clone_master.clones.append(clone_target)
                 for ttarget, tcodeblock in WhenStartAsCloneNodes:
                     if ttarget is clone_master:
                         Thread(target=RunCodeBlock, args=(clone_target, tcodeblock, rtssManager.get_new(clone_target, tcodeblock)), daemon=True).start()
@@ -770,7 +771,7 @@ def RunCodeBlock(
             
             case "procedures_call":
                 proccode = codeblock.proccode
-                ScratchFunction, argmap = [(i, argmap) for t, i, pcode, argmap in ScratchFunctions if t is target and pcode == proccode][0]
+                ScratchFunction, argmap = [(i, argmap) for t, i, pcode, argmap in ScratchFunctions if (t is target or target in t.clones) and pcode == proccode][0]
                 argumentdefaults = eval(target.getInputValue(*ScratchFunction.inputs["custom_block"], r2c=False, stack=stack).argumentdefaults)
                 args = {}
                 i = 0
@@ -874,6 +875,8 @@ def RunCodeBlock(
             case "data_showvariable": ...
             
             case "data_hidevariable": ...
+            
+            case "__python_pass__": pass
     except Exception as e:
         print(f"Error in RunCodeBlock: {e.__class__}, {e}")
     
@@ -906,6 +909,7 @@ def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.
 def Run_Repeat(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.ScratchCodeBlock, stack: ScratchObjects.ScratchRuntimeStack):
     looptimes = int(target.getInputValue(*codeblock.inputs["TIMES"], stack=stack))
     if looptimes <= 0: return None
+    
     if codeblock.inputs["SUBSTACK"][1] is None:
         for _ in [None] * looptimes:
             if stack.stopped:

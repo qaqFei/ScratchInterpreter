@@ -41,27 +41,51 @@ def _loadSb3_loadCodeBlocks(codeBlocks:dict):
             v.update(v["mutation"])
             del v["mutation"]
     return {
-        k: ScratchObjects.ScratchCodeBlock(
+        k: _loadSb3_procsCodeBlock(ScratchObjects.ScratchCodeBlock(
             opcode = v.get("opcode", ""),
             params = v.get("params", {}),
             next = v.get("next", None),
-            parent = v.get("parent", None),
             inputs = v.get("inputs", {}),
             fields = v.get("fields", {}),
-            shadow = v.get("shadow", False),
-            topLevel = v.get("topLevel", False),
             
-            tagName = v.get("tagName", None),
-            children = v.get("children", None),
             proccode = v.get("proccode", None),
             argumentids = v.get("argumentids", None),
-            warp = v.get("warp", None),
             argumentnames = v.get("argumentnames", None),
             argumentdefaults = v.get("argumentdefaults", None),
-            hasnext = v.get("hasnext", None)
-        )
+        ))
         for k, v in codeBlocks.items() if isinstance(v, dict)
     }
+
+def _loadSb3_procsCodeBlock(codeblock: ScratchObjects.ScratchCodeBlock):
+    match codeblock.opcode:
+        case "control_forever" | "control_repeat" | "control_if" | "control_if_else" | "control_repeat_until":
+            if "SUBSTACK" not in codeblock.inputs:
+                codeblock.inputs["SUBSTACK"] = [2 << 8, ScratchObjects.ScratchCodeBlock(
+                    opcode = "__python_pass__",
+                    params = {},
+                    next = None,
+                    inputs = {},
+                    fields = {},
+                    proccode = None,
+                    argumentids=  None,
+                    argumentnames = None,
+                    argumentdefaults = None
+                )]
+            if codeblock.opcode == "control_if_else":
+                if "SUBSTACK2" not in codeblock.inputs:
+                    codeblock.inputs["SUBSTACK2"] = [2 << 8, ScratchObjects.ScratchCodeBlock(
+                        opcode = "__python_pass__",
+                        params = {},
+                        next = None,
+                        inputs = {},
+                        fields = {},
+                        proccode = None,
+                        argumentids=  None,
+                        argumentnames = None,
+                        argumentdefaults = None
+                    )]
+            
+    return codeblock
 
 def _loadSb3_loadAssets(assets:list):
     r = []
