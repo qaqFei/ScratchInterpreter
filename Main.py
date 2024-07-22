@@ -59,6 +59,7 @@ stage_mtop = 180
 stage_mright = 240
 stage_mbottom = -180
 RunWait = 0.0 # 1 / 120
+LoopRunWait = 1 / 120
 AFps = 120
 soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
@@ -709,7 +710,7 @@ def RunCodeBlock(
                 Run_IfElse(target, codeblock, ifvar, stack)
             
             case "control_wait_until":
-                while not target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack): sleep(RunWait)
+                while not target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack): sleep(LoopRunWait)
             
             case "control_repeat_until":
                 get_ifvar = lambda: target.getInputValue(*codeblock.inputs["CONDITION"], stack=stack)
@@ -894,7 +895,7 @@ def Run_Forever(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.
         while True:
             if stack.stopped:
                 return None
-            sleep(RunWait)
+            sleep(LoopRunWait)
         
     context = ScratchObjects.ScratchContext(target, codeblock)
     while True:
@@ -909,7 +910,7 @@ def Run_Repeat(target: ScratchObjects.ScratchTarget, codeblock: ScratchObjects.S
         for _ in [None] * looptimes:
             if stack.stopped:
                 return None
-            sleep(RunWait)
+            sleep(LoopRunWait)
     
     context = ScratchObjects.ScratchContext(target, codeblock)
     for _ in [None] * looptimes:
