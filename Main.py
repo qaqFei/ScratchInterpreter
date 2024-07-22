@@ -616,7 +616,14 @@ def RunCodeBlock(
                     case "random backdrop":
                         ScratchObjects.Stage.currentCostume = randint(0, len(ScratchObjects.Stage.costumes) - 1)
                     case _:
-                        ScratchObjects.Stage.currentCostume = [i.name for i in ScratchObjects.Stage.costumes].index(backdrop_name)
+                        if isinstance(backdrop_name, int|float|bool):
+                            backdrop_name = int(float(backdrop_name))
+                        try:
+                            names = [i.name for i in ScratchObjects.Stage.costumes]
+                            ScratchObjects.Stage.currentCostume = names.index(str(backdrop_name))
+                        except ValueError:
+                            backdrop_index = int(float(backdrop_name)) - 1
+                            target.currentCostume = backdrop_index
                 ChangeBgCallback(target)
             
             case "looks_switchbackdroptoandwait": # XXX, in scratch i cannot find this block, but it is exists in wiki...
