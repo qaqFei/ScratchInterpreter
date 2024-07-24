@@ -970,7 +970,7 @@ def Render():
     while True:
         window.clear_canvas(wait_execute=True)
         window.run_js_code(f"stage_ctx.clearRect(0, 0, {w}, {h});", add_code_array=True)
-        soeredtarget = sorted(project_object.targets, key = lambda x: x.layerOrder)
+        soeredtarget = sorted(project_object.targets, key = lambda x: x.layerOrder)[::-1]
         stagetargets = filter(lambda x: x.isStage, soeredtarget)
         spritetargets = filter(lambda x: not x.isStage, soeredtarget)
         
@@ -1038,6 +1038,9 @@ def Boot():
             window.reg_img(asset.data, asset.pyresid)
     window.load_allimg()
     window.shutdown_fileserver()
+    for asset in ScratchObjects.Assets:
+        if isinstance(asset.data, Image.Image):
+            asset.data = None
     Thread(target=MainInterpreter, daemon=True).start()
 
 window = webcvapis.WebCanvas(
