@@ -421,6 +421,10 @@ class ScratchTarget:
                 return code.fields["TOWARDS"][0]
             case "looks_costume":
                 return code.fields["COSTUME"][0]
+            case "looks_gotofrontback":
+                return code.fields["FRONT_BACK"][0]
+            case "looks_goforwardbackwardlayers":
+                return code.fields["FORWARD_BACKWARD"][0]
             case "looks_backdrops":
                 return code.fields["BACKDROP"][0]
             case "sound_sounds_menu":

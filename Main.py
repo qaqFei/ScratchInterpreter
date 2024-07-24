@@ -60,8 +60,8 @@ stage_mleft = -240
 stage_mtop = 180
 stage_mright = 240
 stage_mbottom = -180
-RunWait = 1 / 30
-LoopRunWait = 1 / 120
+RunWait = 1 / 60
+LoopRunWait = 1 / 240
 AFps = 120
 soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
@@ -392,7 +392,7 @@ def DestoryStack(stack: ScratchObjects.ScratchRuntimeStack):
 
 def TargetInStage(target: ScratchObjects.ScratchTarget) -> bool:
     lt, rt, rb, lb  = getTargetBox(target)
-    return pointInScreen(lt) and pointInScreen(rt) and pointInScreen(rb) and pointInScreen(lb)
+    return pointInScreen(*lt) and pointInScreen(*rt) and pointInScreen(*rb) and pointInScreen(*lb)
 
 def pointInScreen(x: float, y: float) -> bool:
     return 0 <= x <= w and 0 <= y <= h
@@ -668,9 +668,20 @@ def RunCodeBlock(
             case "looks_hide":
                 target.visible = False
                 
-            case "looks_gotofrontback": ...
+            case "looks_gotofrontback":
+                match target.ScratchEval(codeblock, stack):
+                    case "front":
+                        target.layerOrder = max([i.layerOrder for i in project_object.targets]) + 1
+                    case "back":
+                        target.layerOrder = min([i.layerOrder for i in project_object.targets]) - 1
             
-            case "looks_goforwardbackwardlayers": ...
+            case "looks_goforwardbackwardlayers":
+                n = int(target.getInputValue(*codeblock.inputs["NUM"], stack=stack))
+                match target.ScratchEval(codeblock, stack):
+                    case "forward":
+                        target.layerOrder += n
+                    case "backward":
+                        target.layerOrder -= n
             
             case "sound_playuntildone" | "sound_play":
                 menuv = target.getInputValue(*codeblock.inputs["SOUND_MENU"], stack=stack)
@@ -970,7 +981,7 @@ def Render():
     while True:
         window.clear_canvas(wait_execute=True)
         window.run_js_code(f"stage_ctx.clearRect(0, 0, {w}, {h});", add_code_array=True)
-        soeredtarget = sorted(project_object.targets, key = lambda x: x.layerOrder)[::-1]
+        soeredtarget = sorted(project_object.targets, key = lambda x: x.layerOrder)
         stagetargets = filter(lambda x: x.isStage, soeredtarget)
         spritetargets = filter(lambda x: not x.isStage, soeredtarget)
         
@@ -1038,9 +1049,6 @@ def Boot():
             window.reg_img(asset.data, asset.pyresid)
     window.load_allimg()
     window.shutdown_fileserver()
-    for asset in ScratchObjects.Assets:
-        if isinstance(asset.data, Image.Image):
-            asset.data = None
     Thread(target=MainInterpreter, daemon=True).start()
 
 window = webcvapis.WebCanvas(
