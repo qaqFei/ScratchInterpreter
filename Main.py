@@ -61,7 +61,7 @@ stage_mtop = 180
 stage_mright = 240
 stage_mbottom = -180
 RunWait = 1 / 60
-LoopRunWait = 1 / 240
+LoopRunWait = 1 / 60
 AFps = 120
 soundbuffers = {} # if buffer is collected by python, sound will be stop.
 PlaySound.setVolume(1.0)
@@ -843,7 +843,8 @@ def RunCodeBlock(
                     v.value += float(vv)
                     if v.value % 1.0 == 0.0:
                         v.value = int(v.value)
-                except ValueError:
+                except Exception:
+                    v.value = str(v.value)
                     v.value += str(vv)
             
             case "data_addtolist":
