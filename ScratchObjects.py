@@ -478,40 +478,43 @@ class ScratchTarget:
             return Stage.lists[lid]
     
     def getInputValue(self, itype: int, value: str|list|ScratchCodeBlock, ele3 = None, ele4 = None, ele5 = None, r2c = True, stack: ScratchRuntimeStack|None = None, *eles):
-        match itype:
-            case 1:
-                if isinstance(value, str):
+        try:
+            match itype:
+                case 1:
+                    if isinstance(value, str):
+                        if r2c:
+                            return self.ScratchEval(self.blocks[value], stack)
+                        return self.blocks[value]
+                    return self.getInputValue(*value, stack=stack)
+                case 2:
                     if r2c:
-                        return self.ScratchEval(self.blocks[value], stack)
-                    return self.blocks[value]
-                return self.getInputValue(*value, stack=stack)
-            case 2:
-                if r2c:
-                    return self._giv_run(value, stack)
-                else:
-                    return self.blocks[value]
-            case 3:
-                if r2c:
-                    return self._giv_run(value, stack)
-                else:
-                    return self.blocks[value]
-            case 4|5|6|7|8:
-                return float(value) if value else 0.0
-            case 9|10:
-                return value
-            case 11:
-                return ele3
-            case 12:
-                return self._get_variableByid(ele3).value
-            case 13:
-                return " ".join(map(str, self._get_listByid(ele3).items))
-            case 512:
-                if r2c:
-                    return self.ScratchEval(value, stack)
-                else:
+                        return self._giv_run(value, stack)
+                    else:
+                        return self.blocks[value]
+                case 3:
+                    if r2c:
+                        return self._giv_run(value, stack)
+                    else:
+                        return self.blocks[value]
+                case 4|5|6|7|8:
+                    return float(value) if value else 0.0
+                case 9|10:
                     return value
-            case _:
-                return "0.0"
+                case 11:
+                    return ele3
+                case 12:
+                    return self._get_variableByid(ele3).value
+                case 13:
+                    return " ".join(map(str, self._get_listByid(ele3).items))
+                case 512:
+                    if r2c:
+                        return self.ScratchEval(value, stack)
+                    else:
+                        return value
+                case _:
+                    return "0.0"
+        except Exception:
+            return "0.0"
     
     def _timer(self):
         while True:
